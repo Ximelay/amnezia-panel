@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/trpc/react';
 import { InputSearchLoader } from '@/components/input-search';
 import { Loader } from '@/components/loader';
@@ -70,6 +70,7 @@ export default function ClientsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Clients table</CardTitle>
+                    <CardDescription>Clients count: {data?.totalClients}</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="mb-6 flex items-center justify-between gap-4">
@@ -105,7 +106,10 @@ export default function ClientsPage() {
                         </div>
 
                         {process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true' && (
-                            <Button disabled={sendMessages.isPending} onClick={onSubmit} className='bg-blue-600 hover:bg-blue-500'>
+                            <Button
+                                disabled={sendMessages.isPending}
+                                onClick={onSubmit}
+                                className="bg-blue-600 hover:bg-blue-500">
                                 {sendMessages.isPending && (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 )}

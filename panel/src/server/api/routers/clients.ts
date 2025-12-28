@@ -174,9 +174,10 @@ export const clientsRouter = createTRPCRouter({
             return {
                 clients: clientsWithConfigs,
                 orphanConfigs,
+                totalClients: clients.length,
             };
         }),
-        
+
     createClient: publicProcedure.input(createClientSchema).mutation(async ({ ctx, input }) => {
         const { name, telegramId, configs } = input;
 
