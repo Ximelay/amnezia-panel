@@ -256,16 +256,16 @@ class AmneziaApiService {
                 `Failed to delete config: ${error instanceof TRPCError || error instanceof Error ? error.message : 'Unknown error'}`
             );
 
-            return {message: 'Error: Not found config'}
-
-            // if (error instanceof TRPCError) {
-            //     throw error;
-            // }
-
-            // throw new TRPCError({
-            //     code: 'INTERNAL_SERVER_ERROR',
-            //     message: `Failed to delete config: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            // });
+            if (error instanceof TRPCError && error.message.includes('Not found')) {
+                return { message: 'Error: Not found config' };
+            } else if (error instanceof TRPCError) {
+                throw error;
+            } else {
+                throw new TRPCError({
+                    code: 'INTERNAL_SERVER_ERROR',
+                    message: `Failed to delete config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                });
+            }
         }
     }
 
