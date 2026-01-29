@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -32,19 +32,20 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Plus, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { addMonths, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { api } from '@/trpc/react';
 import { createConfigSchema, type createConfigFormData } from '@/lib/schemas/configs';
 import { protocolsMapping } from '@/lib/data/mappings';
+import MultipleSelector from '@/components/ui/multi-select';
 
 export function CreateConfigDialog() {
     const [open, setOpen] = useState(false);
     const [usernameTouched, setUsernameTouched] = useState(false);
     const utils = api.useUtils();
 
-    const { data: clients } = api.clients.getClients.useQuery();
+    const { data: clients, isLoading: isLoadingClients } = api.clients.getClients.useQuery();
 
     const form = useForm<createConfigFormData>({
         resolver: zodResolver(createConfigSchema),
@@ -58,6 +59,14 @@ export function CreateConfigDialog() {
 
     const watchClientId = form.watch('clientId');
 
+    const [localClients, setLocalClients] = useState<typeof clients>([]);
+
+    useEffect(() => {
+        if (clients) {
+            setLocalClients(clients);
+        }
+    }, [clients]);
+
     useEffect(() => {
         if (watchClientId && watchClientId !== '') {
             const selectedClient = clients?.find((client) => String(client.id) === watchClientId);
@@ -70,7 +79,7 @@ export function CreateConfigDialog() {
     }, [watchClientId, clients, form, usernameTouched]);
 
     useEffect(() => {
-        const subscription = form.watch((value, { name }) => {
+        const subscription = form.watch((_, { name }) => {
             if (name === 'username') {
                 setUsernameTouched(true);
             }
@@ -102,6 +111,17 @@ export function CreateConfigDialog() {
         createConfig.mutate(data);
     };
 
+    const setQuickDate = (monthsToAdd: number) => {
+        const now = new Date();
+        const newDate = addMonths(now, monthsToAdd);
+        const unixTimestamp = Math.floor(newDate.getTime() / 1000).toString();
+        form.setValue('expiresAt', unixTimestamp, {
+            shouldValidate: true,
+            shouldDirty: true,
+            shouldTouch: true,
+        });
+    };
+
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -110,7 +130,7 @@ export function CreateConfigDialog() {
                     Create Config
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[525px]">
+            <DialogContent className="sm:max-w-131.25">
                 <DialogHeader>
                     <DialogTitle>Create New Config</DialogTitle>
                     <DialogDescription>
@@ -120,37 +140,70 @@ export function CreateConfigDialog() {
 
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <FormField
-                            control={form.control}
-                            name="clientId"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Client (Optional)</FormLabel>
-                                    <Select
-                                        onValueChange={(value) =>
-                                            field.onChange(value === 'none' ? '' : value)
-                                        }
-                                        value={field.value || 'none'}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select a client" />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="none">No client (Orphan)</SelectItem>
-                                            {clients?.map((client) => (
-                                                <SelectItem
-                                                    key={String(client.id)}
-                                                    value={String(client.id)}>
-                                                    {client.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                        {isLoadingClients || !localClients ? (
+                            <div className="flex items-center justify-center py-4">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span className="ml-2 text-sm">Loading clients...</span>
+                            </div>
+                        ) : (
+                            <FormField
+                                control={form.control}
+                                name="clientId"
+                                render={({ field }) => {
+                                    const clientOptions = useMemo(() => {
+                                        if (!localClients) return [];
+                                        return localClients.map((client) => ({
+                                            value: String(client.id),
+                                            label: client.name,
+                                        }));
+                                    }, [localClients]);
+
+                                    const currentValue = useMemo(() => {
+                                        if (!field.value) return [];
+                                        const client = localClients?.find(
+                                            (c) => String(c.id) === String(field.value)
+                                        );
+                                        return client
+                                            ? [
+                                                  {
+                                                      value: String(client.id),
+                                                      label: client.name,
+                                                  },
+                                              ]
+                                            : [];
+                                    }, [field.value, localClients]);
+
+                                    return (
+                                        <FormItem>
+                                            <FormLabel>Client (Optional)</FormLabel>
+                                            <MultipleSelector
+                                                value={currentValue}
+                                                onChange={(selectedOptions) => {
+                                                    if (selectedOptions.length === 0) {
+                                                        field.onChange('');
+                                                    } else {
+                                                        field.onChange(
+                                                            selectedOptions[0]?.value || ''
+                                                        );
+                                                    }
+                                                }}
+                                                options={clientOptions}
+                                                placeholder="Search client..."
+                                                emptyIndicator={
+                                                    <p className="text-center text-sm">
+                                                        No results found
+                                                    </p>
+                                                }
+                                                className="w-full"
+                                                maxSelected={1}
+                                                hidePlaceholderWhenSelected
+                                            />
+                                            <FormMessage />
+                                        </FormItem>
+                                    );
+                                }}
+                            />
+                        )}
 
                         <FormField
                             control={form.control}
@@ -209,9 +262,38 @@ export function CreateConfigDialog() {
                             name="expiresAt"
                             render={({ field }) => (
                                 <FormItem className="flex flex-col">
-                                    <FormLabel>
-                                        Expiration Date <span className="text-destructive">*</span>
-                                    </FormLabel>
+                                    <div className="mb-2 flex items-center justify-between">
+                                        <FormLabel>
+                                            Expiration Date{' '}
+                                            <span className="text-destructive">*</span>
+                                        </FormLabel>
+                                        <div className="flex gap-1">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setQuickDate(1)}
+                                                className="h-7 text-xs">
+                                                1 month
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setQuickDate(3)}
+                                                className="h-7 text-xs">
+                                                3 months
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setQuickDate(6)}
+                                                className="h-7 text-xs">
+                                                6 months
+                                            </Button>
+                                        </div>
+                                    </div>
                                     <Popover>
                                         <PopoverTrigger asChild>
                                             <FormControl>

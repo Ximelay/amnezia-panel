@@ -22,7 +22,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Plus, Trash2, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { addMonths, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { api } from '@/trpc/react';
@@ -34,7 +34,7 @@ import { useRouter } from 'next/navigation';
 
 export default function CreateClientPage() {
     const utils = api.useUtils();
-    const router = useRouter()
+    const router = useRouter();
 
     const form = useForm<createClientFormData>({
         resolver: zodResolver(createClientSchema),
@@ -64,7 +64,7 @@ export default function CreateClientPage() {
             toast.success('Client and configs created successfully');
             form.reset();
             utils.clients.getClientsWithConfigs.invalidate();
-            router.push('/')
+            router.push('/');
         },
         onError: (error) => {
             toast.error('Error creating client');
@@ -91,6 +91,17 @@ export default function CreateClientPage() {
             username: '',
             expiresAt: '',
             protocol: 'AMNEZIAWG',
+        });
+    };
+
+    const setQuickDate = (monthsToAdd: number, index: number) => {
+        const now = new Date();
+        const newDate = addMonths(now, monthsToAdd);
+        const unixTimestamp = Math.floor(newDate.getTime() / 1000).toString();
+        form.setValue(`configs.${index}.expiresAt`, unixTimestamp, {
+            shouldValidate: true,
+            shouldDirty: true,
+            shouldTouch: true,
         });
     };
 
@@ -309,12 +320,46 @@ export default function CreateClientPage() {
                                                     name={`configs.${index}.expiresAt`}
                                                     render={({ field }) => (
                                                         <FormItem className="flex flex-col">
-                                                            <FormLabel>
-                                                                Expiration Date{' '}
-                                                                <span className="text-destructive">
-                                                                    *
-                                                                </span>
-                                                            </FormLabel>
+                                                            <div className="mb-2 flex items-center justify-between">
+                                                                <FormLabel>
+                                                                    Expiration Date{' '}
+                                                                    <span className="text-destructive">
+                                                                        *
+                                                                    </span>
+                                                                </FormLabel>
+                                                                <div className="flex gap-1">
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() =>
+                                                                            setQuickDate(1, index)
+                                                                        }
+                                                                        className="h-7 text-xs">
+                                                                        1 month
+                                                                    </Button>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() =>
+                                                                            setQuickDate(3, index)
+                                                                        }
+                                                                        className="h-7 text-xs">
+                                                                        3 months
+                                                                    </Button>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() =>
+                                                                            setQuickDate(6, index)
+                                                                        }
+                                                                        className="h-7 text-xs">
+                                                                        6 months
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
                                                             <Popover>
                                                                 <PopoverTrigger asChild>
                                                                     <FormControl>
