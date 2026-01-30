@@ -250,17 +250,23 @@ class AmneziaApiService {
                 }
             );
         } catch (error) {
-            await logsService.createLog(
-                'SERVER',
-                'ERROR',
-                `Failed to delete config: ${error instanceof TRPCError || error instanceof Error ? error.message : 'Unknown error'}`
-            );
-
             if (error instanceof TRPCError && error.message.includes('Not found')) {
+                await logsService.createLog(
+                    'SERVER',
+                    'ERROR',
+                    'Failed to delete config of AmneziaVPN (404 Not found) but deleted in database'
+                );
+
                 return { message: 'Error: Not found config' };
             } else if (error instanceof TRPCError) {
                 throw error;
             } else {
+                await logsService.createLog(
+                    'SERVER',
+                    'ERROR',
+                    `Failed to delete config: ${error instanceof TRPCError || error instanceof Error ? error.message : 'Unknown error'}`
+                );
+
                 throw new TRPCError({
                     code: 'INTERNAL_SERVER_ERROR',
                     message: `Failed to delete config: ${error instanceof Error ? error.message : 'Unknown error'}`,
