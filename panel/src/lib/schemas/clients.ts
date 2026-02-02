@@ -1,8 +1,10 @@
 import z from 'zod';
 import { createConfigSchema } from './configs';
+import { Languages } from 'prisma/generated/enums';
 
 export const createClientSchema = z.object({
     name: z.string().min(1).max(30),
+    language: z.enum(Languages),
     telegramId: z.string().optional(),
     configs: z.array(createConfigSchema),
 });

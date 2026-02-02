@@ -9,9 +9,20 @@ import { serverBackupSchema } from '@/server/interfaces/amnezia-api';
 import { TRPCError } from '@trpc/server';
 
 export const serverRouter = createTRPCRouter({
-    getServer: publicProcedure.query(async () => {
-        return await amneziaApiService.getServer();
-    }),
+    getServer: publicProcedure
+        .input(z.object({ serverId: z.number() }))
+        .query(async ({ input }) => {
+            const { serverId } = input;
+
+            return await amneziaApiService.getServer(serverId);
+        }),
+
+    getServerLoad: publicProcedure
+        .input(z.object({ serverId: z.number() }))
+        .query(async ({ input }) => {
+            const { serverId } = input;
+
+        }),
 
     getLogs: publicProcedure
         .input(
@@ -27,26 +38,35 @@ export const serverRouter = createTRPCRouter({
             return await logsService.getLogs(input);
         }),
 
-    downloadBackup: publicProcedure.mutation(async () => {
-        const backup = await amneziaApiService.getServerBackup();
-
-        const jsonString = JSON.stringify(backup, null, 2);
-
-        const buffer = Buffer.from(jsonString, 'utf-8');
-        const base64Content = buffer.toString('base64');
-
-        await logsService.createLog('SERVER', 'INFO', 'Server backup was downloaded successfully');
-
-        return {
-            filename: 'server-backup.json',
-            content: base64Content,
-            mimeType: 'application/json',
-        };
-    }),
-    importBackup: publicProcedure
-        .input(z.object({ fileContent: z.string() }))
+    downloadBackup: publicProcedure
+        .input(z.object({ serverId: z.number() }))
         .mutation(async ({ input }) => {
-            const { fileContent } = input;
+            const { serverId } = input;
+
+            const backup = await amneziaApiService.getServerBackup(serverId);
+
+            const jsonString = JSON.stringify(backup, null, 2);
+
+            const buffer = Buffer.from(jsonString, 'utf-8');
+            const base64Content = buffer.toString('base64');
+
+            await logsService.createLog(
+                'SERVER',
+                'INFO',
+                'Server backup was downloaded successfully'
+            );
+
+            return {
+                filename: 'server-backup.json',
+                content: base64Content,
+                mimeType: 'application/json',
+            };
+        }),
+
+    importBackup: publicProcedure
+        .input(z.object({ serverId: z.number(), fileContent: z.string() }))
+        .mutation(async ({ input }) => {
+            const { serverId, fileContent } = input;
 
             const backupFile = await (async () => {
                 try {
@@ -54,7 +74,7 @@ export const serverRouter = createTRPCRouter({
                     return serverBackupSchema.parse(parsed);
                 } catch {
                     await logsService.createLog('SERVER', 'ERROR', 'Server backup was not parsed');
-                    
+
                     throw new TRPCError({
                         code: 'BAD_REQUEST',
                         message: 'Invalid Backup file',
@@ -62,7 +82,7 @@ export const serverRouter = createTRPCRouter({
                 }
             })();
 
-            await amneziaApiService.importServerBackup(backupFile);
+            await amneziaApiService.importServerBackup(serverId, backupFile);
 
             await logsService.createLog(
                 'SERVER',
@@ -71,9 +91,13 @@ export const serverRouter = createTRPCRouter({
             );
         }),
 
-    rebootServer: publicProcedure.mutation(async () => {
-        await logsService.createLog('SERVER', 'WARNING', 'Server was rebooted');
+    rebootServer: publicProcedure
+        .input(z.object({ serverId: z.number() }))
+        .mutation(async ({ input }) => {
+            const { serverId } = input;
 
-        await amneziaApiService.rebootServer();
-    }),
+            await logsService.createLog('SERVER', 'WARNING', 'Server was rebooted');
+
+            await amneziaApiService.rebootServer(serverId);
+        }),
 });

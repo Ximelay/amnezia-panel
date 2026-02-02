@@ -13,10 +13,11 @@ import { telegramService } from '@/server/services/telegram/telegram';
 
 export const configsRouter = createTRPCRouter({
     createConfig: publicProcedure.input(createConfigSchema).mutation(async ({ ctx, input }) => {
-        const { clientId, username, expiresAt, protocol } = input;
+        const { clientId, serverId, clientName, expiresAt, protocol } = input;
 
         const createdConfig = await amneziaApiService.createConfig(
-            username,
+            Number(serverId),
+            clientName,
             protocolsApiMapping[protocol],
             Number(expiresAt)
         );
@@ -26,15 +27,16 @@ export const configsRouter = createTRPCRouter({
         await ctx.db.configs.create({
             data: {
                 id: createdConfig.client.id,
+                serverId: Number(serverId),
                 clientId: Number(clientId) || null,
-                username,
+                clientName,
                 expiresAt,
                 protocol,
                 vpnKey: encryptedVpnKey,
             },
         });
 
-        await logsService.createLog('CLIENT', 'INFO', `Config ${username} created`);
+        await logsService.createLog('CLIENT', 'INFO', `Config ${clientName} created`);
     }),
 
     updateClientConfig: publicProcedure
@@ -45,43 +47,43 @@ export const configsRouter = createTRPCRouter({
             const updatedConfig = await ctx.db.configs.update({
                 where: { id },
                 data: { clientId: Number(clientId) },
-                select: { username: true },
+                select: { clientName: true },
             });
 
             await logsService.createLog(
                 'CLIENT',
                 'INFO',
-                `Config ${updatedConfig.username} updated`
+                `Config ${updatedConfig.clientName} updated`
             );
         }),
 
     deleteConfig: publicProcedure
-        .input(z.object({ id: z.string(), protocol: z.enum(Protocols) }))
+        .input(z.object({ serverId: z.number(), id: z.string(), protocol: z.enum(Protocols) }))
         .mutation(async ({ ctx, input }) => {
-            const { id, protocol } = input;
+            const { serverId, id, protocol } = input;
 
             const foundConfig = await ctx.db.configs.findUnique({
                 where: { id },
-                select: { protocol: true },
+                select: { serverId: true, protocol: true },
             });
 
-            await amneziaApiService.deleteConfig(id, protocolsApiMapping[protocol]);
+            await amneziaApiService.deleteConfig(serverId, id, protocolsApiMapping[protocol]);
 
             let deletedConfig: {
-                username: string;
+                clientName: string;
             } | null = null;
 
             if (foundConfig) {
                 deletedConfig = await ctx.db.configs.delete({
                     where: { id },
-                    select: { username: true },
+                    select: { clientName: true },
                 });
             }
 
             await logsService.createLog(
                 'CLIENT',
                 'WARNING',
-                `Config ${deletedConfig?.username || 'that does not exist in database'} deleted`
+                `Config ${deletedConfig?.clientName || 'that does not exist in database'} deleted`
             );
         }),
 
@@ -105,7 +107,7 @@ export const configsRouter = createTRPCRouter({
                 where: { id },
                 select: {
                     vpnKey: true,
-                    username: true,
+                    clientName: true,
                     expiresAt: true,
                     protocol: true,
                     Clients: { select: { name: true, telegramId: true } },
@@ -126,7 +128,7 @@ export const configsRouter = createTRPCRouter({
                 : 'Not set';
 
             const message = `
-🔐 New VPN configuration for <b>${foundConfig.username.startsWith(foundConfig.Clients.name) ? foundConfig.username.split('-')[1] : foundConfig.username}</b> from Ne4VPN
+🔐 New VPN configuration for <b>${foundConfig.clientName.startsWith(foundConfig.Clients.name) ? foundConfig.clientName.split('-')[1] : foundConfig.clientName}</b> from Ne4VPN
 Protocol: <b>${protocolsMapping[foundConfig.protocol] || 'Not specified'}</b>
 Expiration date: <b>${expiryDate}</b>
 <code>${decryptedVpnKey}</code>`;
@@ -143,7 +145,7 @@ Expiration date: <b>${expiryDate}</b>
             await logsService.createLog(
                 'TELEGRAM',
                 'INFO',
-                `VPN key of ${foundConfig?.username} sent`
+                `VPN key of ${foundConfig?.clientName} sent`
             );
         }),
 });

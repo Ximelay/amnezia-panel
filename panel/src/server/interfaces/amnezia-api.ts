@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export type Protocol = 'amneziawg' | 'xray';
 
-export interface IDevice {
+export interface IPeer {
     id: string;
     name: string;
     allowedIps: string[];
@@ -17,17 +17,17 @@ export interface IDevice {
     protocol: Protocol;
 }
 
-export interface IUser {
+export interface IClient {
     username: string;
-    devices: IDevice[];
+    peers: IPeer[];
 }
 
-export interface GetUsersResponse {
+export interface GetClientsResponse {
     total: number;
-    items: IUser[];
+    items: IClient[];
 }
 
-export interface CreateUserResponse {
+export interface CreateClientResponse {
     message: string;
     client: {
         id: string;
@@ -76,6 +76,53 @@ export interface ServerBackup {
         privateKey: string;
         shortId: string;
     };
+}
+
+interface CpuInfo {
+    cores: number;
+}
+
+interface MemoryInfo {
+    totalBytes: number;
+    freeBytes: number;
+    usedBytes: number;
+}
+
+interface DiskInfo {
+    totalBytes: number;
+    usedBytes: number;
+    availableBytes: number;
+    usedPercent: number;
+}
+
+interface NetworkInfo {
+    rxBytes: number;
+    txBytes: number;
+}
+
+interface DockerInfo {
+    containers: ContainerInfo[];
+}
+
+interface ContainerInfo {
+    name: string;
+    cpuPercent: number;
+    memUsageBytes: number;
+    memLimitBytes: number;
+    netRxBytes: number;
+    netTxBytes: number;
+    pids: number;
+}
+
+export interface GetServerLoadResponse {
+    timestamp: string;
+    uptimeSec: number;
+    loadavg: [number, number, number];
+    cpu: CpuInfo;
+    memory: MemoryInfo;
+    disk: DiskInfo;
+    network: NetworkInfo;
+    docker: DockerInfo;
 }
 
 const clientsSchema = z.object({

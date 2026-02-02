@@ -23,3 +23,7 @@ const LogTypeFilterEnum = {
 };
 
 export type LogTypesFilter = keyof typeof LogTypeFilterEnum | keyof typeof logTypeEnum;
+
+export const TTL_CONFIG = {
+    SERVERS: 10 * 60 * 1000, // 10 minutes
+} as const;

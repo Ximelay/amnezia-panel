@@ -8,23 +8,36 @@ datasource db {
     // url      = env("DATABASE_URL")
 }
 
+model Servers {
+    id        Int       @id @default(autoincrement())
+    createdAt DateTime  @default(now())
+    name      String
+    ip        String
+    port      String
+    apiKey    Json
+    Configs   Configs[]
+}
+
 model Clients {
     id         Int       @id @default(autoincrement())
     createdAt  DateTime  @default(now())
     name       String
+    language   Languages
     telegramId String?
     Configs    Configs[]
 }
 
 model Configs {
-    id        String    @id
-    createdAt DateTime  @default(now())
-    username  String
-    vpnKey    Json
-    expiresAt String?
-    protocol  Protocols
-    clientId  Int?
-    Clients   Clients?  @relation(fields: [clientId], references: [id])
+    id         String    @id
+    createdAt  DateTime  @default(now())
+    clientName String
+    vpnKey     Json
+    expiresAt  String?
+    protocol   Protocols
+    clientId   Int?
+    serverId   Int
+    Clients    Clients?  @relation(fields: [clientId], references: [id])
+    Servers    Servers   @relation(fields: [serverId], references: [id])
 }
 
 model Logs {
@@ -50,4 +63,9 @@ enum LogTypes {
     TELEGRAM
     SERVER
     CLIENT
+}
+
+enum Languages {
+    RUSSIAN
+    ENGLISH
 }

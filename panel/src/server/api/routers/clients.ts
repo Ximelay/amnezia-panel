@@ -5,51 +5,71 @@ import type { ProtocolsFilter } from '@/server/enums';
 import type { Prisma } from 'prisma/generated/client';
 import { createClientSchema, updateClientSchema } from '@/lib/schemas/clients';
 import { amneziaApiService } from '@/server/services/amnezia-api';
-import { apiProtocolsMapping, protocolsApiMapping, protocolsMapping } from '@/lib/data/mappings';
+import { apiProtocolsMapping, protocolsApiMapping } from '@/lib/data/mappings';
 import { encryptionService } from '@/server/services/encryption';
-import type { IDevice } from '@/server/interfaces/amnezia-api';
+import type { IPeer } from '@/server/interfaces/amnezia-api';
 import { logsService } from '@/server/services/logs';
 import { TRPCError } from '@trpc/server';
 import { sendConfigsToTelegram } from '@/server/services/telegram/telegram-messages';
 import { telegramService } from '@/server/services/telegram/telegram';
 
 export const clientsRouter = createTRPCRouter({
-    getClients: publicProcedure.query(async ({ ctx }) => {
-        return await ctx.db.clients.findMany({
-            select: { id: true, name: true },
-        });
-    }),
+    getClients: publicProcedure
+        .input(z.object({ serverId: z.number().optional() }))
+        .query(async ({ input, ctx }) => {
+            const { serverId } = input;
+
+            return await ctx.db.clients.findMany({
+                where: {
+                    ...(serverId && {
+                        Configs: {
+                            some: {
+                                serverId,
+                            },
+                        },
+                    }),
+                },
+                select: {
+                    id: true,
+                    name: true,
+                },
+            });
+        }),
+
     getClientsWithConfigs: publicProcedure
         .input(
             z.object({
+                serverId: z.number(),
                 search: z.string().optional(),
                 protocolFilter: z.string() as z.ZodType<ProtocolsFilter>,
             })
         )
         .query(async ({ ctx, input }) => {
-            const { search, protocolFilter } = input;
+            const { serverId, search, protocolFilter } = input;
 
-            const apiConfigs = await amneziaApiService.getConfigs();
+            const apiConfigs = await amneziaApiService.getConfigs(serverId);
 
-            const apiDevicesMap = new Map<string, IDevice>();
+            const apiDevicesMap = new Map<string, IPeer>();
             const apiDevices: Array<{
                 id: string;
-                username: string;
-                device: IDevice;
+                clientName: string;
+                device: IPeer;
             }> = [];
 
             for (const user of apiConfigs.items) {
-                for (const device of user.devices) {
+                for (const device of user.peers) {
                     apiDevicesMap.set(device.id, device);
                     apiDevices.push({
                         id: device.id,
-                        username: user.username,
+                        clientName: user.username,
                         device: device,
                     });
                 }
             }
 
-            const baseWhereConditions: Prisma.ConfigsWhereInput = {};
+            const baseWhereConditions: Prisma.ConfigsWhereInput = {
+                serverId: serverId,
+            };
 
             const [configsFromDb, clients] = await Promise.all([
                 ctx.db.configs.findMany({
@@ -57,7 +77,7 @@ export const clientsRouter = createTRPCRouter({
                     select: {
                         id: true,
                         createdAt: true,
-                        username: true,
+                        clientName: true,
                         expiresAt: true,
                         protocol: true,
                         clientId: true,
@@ -68,6 +88,13 @@ export const clientsRouter = createTRPCRouter({
                 }),
 
                 ctx.db.clients.findMany({
+                    where: {
+                        Configs: {
+                            some: {
+                                serverId,
+                            },
+                        },
+                    },
                     select: {
                         id: true,
                         createdAt: true,
@@ -115,7 +142,7 @@ export const clientsRouter = createTRPCRouter({
                     mergedConfigs.push({
                         id: apiDevice.id,
                         createdAt: new Date(),
-                        username: apiDevice.username,
+                        clientName: apiDevice.clientName,
                         expiresAt: apiDevice.device.expiresAt
                             ? String(apiDevice.device.expiresAt)
                             : null,
@@ -136,7 +163,7 @@ export const clientsRouter = createTRPCRouter({
             if (search) {
                 const searchLower = search.toLowerCase();
                 filteredConfigs = filteredConfigs.filter((config) =>
-                    config.username.toLowerCase().includes(searchLower)
+                    config.clientName.toLowerCase().includes(searchLower)
                 );
             }
 
@@ -179,15 +206,16 @@ export const clientsRouter = createTRPCRouter({
         }),
 
     createClient: publicProcedure.input(createClientSchema).mutation(async ({ ctx, input }) => {
-        const { name, telegramId, configs } = input;
+        const { name, language, telegramId, configs } = input;
 
         const createdClient = await ctx.db.clients.create({
-            data: { name, telegramId },
+            data: { name, language, telegramId },
         });
 
         for (const config of configs) {
             const createdConfig = await amneziaApiService.createConfig(
-                config.username,
+                Number(config.serverId),
+                config.clientName,
                 protocolsApiMapping[config.protocol],
                 Number(config.expiresAt)
             );
@@ -197,15 +225,16 @@ export const clientsRouter = createTRPCRouter({
             await ctx.db.configs.create({
                 data: {
                     id: createdConfig.client.id,
-                    username: config.username,
+                    clientName: config.clientName,
                     vpnKey: encryptedVpnKey,
                     protocol: config.protocol,
                     expiresAt: config.expiresAt,
                     clientId: createdClient.id,
+                    serverId: Number(config.serverId),
                 },
             });
 
-            await logsService.createLog('CLIENT', 'INFO', `Config ${config.username} created`);
+            await logsService.createLog('CLIENT', 'INFO', `Config ${config.clientName} created`);
         }
 
         await logsService.createLog('CLIENT', 'INFO', `Client ${createdClient.name} created`);
@@ -230,11 +259,12 @@ export const clientsRouter = createTRPCRouter({
 
             const foundConfigs = await ctx.db.configs.findMany({
                 where: { clientId: id },
-                select: { id: true, protocol: true },
+                select: { id: true, serverId: true, protocol: true },
             });
 
             for (const config of foundConfigs) {
                 await amneziaApiService.deleteConfig(
+                    Number(config.serverId),
                     config.id,
                     protocolsApiMapping[config.protocol]
                 );
@@ -269,7 +299,7 @@ export const clientsRouter = createTRPCRouter({
                     Configs: {
                         select: {
                             vpnKey: true,
-                            username: true,
+                            clientName: true,
                             protocol: true,
                             expiresAt: true,
                         },
@@ -308,7 +338,7 @@ export const clientsRouter = createTRPCRouter({
                 Configs: {
                     select: {
                         vpnKey: true,
-                        username: true,
+                        clientName: true,
                         protocol: true,
                         expiresAt: true,
                     },

@@ -3,7 +3,8 @@ import z from 'zod';
 
 export const createConfigSchema = z.object({
     clientId: z.string().optional(),
-    username: z.string().min(1).max(50),
+    serverId: z.string(),
+    clientName: z.string().min(1).max(50),
     expiresAt: z.string().min(1),
     protocol: z.enum(Protocols),
 });

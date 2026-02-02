@@ -7,7 +7,7 @@ import type { Protocols } from 'prisma/generated/enums';
 import type { JsonValue } from '@prisma/client/runtime/client';
 
 interface TelegramConfig {
-    username: string;
+    clientName: string;
     expiresAt: string | null;
     protocol: Protocols;
     vpnKey: JsonValue;
@@ -43,11 +43,11 @@ function formatConfigsMessage(
             ? format(new Date(Number(config.expiresAt) * 1000), 'MM/dd/yyyy')
             : 'Not set';
 
-        const usernameDisplay = config.username.startsWith(clientName)
-            ? config.username.split('-')[1] || config.username
-            : config.username;
+        const clientNameDisplay = config.clientName.startsWith(clientName)
+            ? config.clientName.split('-')[1] || config.clientName
+            : config.clientName;
 
-        return `Configuration for <b>${usernameDisplay}</b>
+        return `Configuration for <b>${clientNameDisplay}</b>
 Protocol: <b>${protocolsMapping[config.protocol] || 'Not specified'}</b>
 Expiration date: <b>${expiryDate}</b>
 <code>${decryptedVpnKey}</code>${index < configs.length - 1 ? '\n─────────────────────\n' : ''}`;

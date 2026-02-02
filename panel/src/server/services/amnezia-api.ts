@@ -2,44 +2,53 @@ import { getTrpcErrorCode } from '@/lib/utils';
 import { TRPCError } from '@trpc/server';
 import { logsService } from './logs';
 import type {
-    CreateUserResponse,
+    CreateClientResponse,
     GetServerResponse,
-    GetUsersResponse,
+    GetClientsResponse,
     MessageResponse,
     Protocol,
     ServerBackup,
     ServerBackupZod,
+    GetServerLoadResponse,
 } from '../interfaces/amnezia-api';
+import { serversCacheService, type CachedServer } from './cache/servers-cache';
 
-interface UniversalResponse {
-    ok: boolean;
-    status: number;
-    statusText: string;
-    headers: {
-        get(name: string): string | null;
-    };
-    text(): Promise<string>;
-    json(): Promise<any>;
-}
+// interface UniversalResponse {
+//     ok: boolean;
+//     status: number;
+//     statusText: string;
+//     headers: {
+//         get(name: string): string | null;
+//     };
+//     text(): Promise<string>;
+//     json(): Promise<any>;
+// }
 
 class AmneziaApiService {
-    private readonly baseUrl: string;
-    private readonly apiKey: string;
-
     private readonly maxRetries = 3;
     private readonly retryDelay = 1000;
 
-    constructor() {
-        this.baseUrl = `http://${process.env.AMNEZIA_API_HOST}:${process.env.AMNEZIA_API_PORT}`;
-        this.apiKey = process.env.AMNEZIA_API_KEY!;
+    private async getApiServer(serverId: number): Promise<CachedServer> {
+        const server = await serversCacheService.getServer(serverId);
+        if (!server?.apiKey) {
+            throw new Error('Amnezia API key is required but not available');
+        }
+        return server;
     }
 
-    private getFetchOptions(method: string): RequestInit {
+    private async getFetchOptions(
+        serverId: number,
+        method: string,
+        server?: CachedServer
+    ): Promise<RequestInit> {
         const headers: HeadersInit = {
             Accept: 'application/json',
             'Content-Type': 'application/json',
-            'x-api-key': this.apiKey,
         };
+
+        const targetServer = server || (await this.getApiServer(serverId));
+        const apiKey = await serversCacheService.getDecryptedApiKey(targetServer.apiKey);
+        headers['apiKey'] = apiKey || '';
 
         return {
             method,
@@ -52,12 +61,16 @@ class AmneziaApiService {
     }
 
     private async makeRequestWithRetry<T>(
+        serverId: number,
         endpoint: string,
-        options: RequestInit,
+        method: string,
         body?: any,
         query?: Record<string, string | number | boolean>
     ): Promise<T> {
-        let url = `${this.baseUrl}/${endpoint}`;
+        const server = await this.getApiServer(serverId);
+        const baseUrl = `http://${server.ip}:${server.port}`;
+
+        let url = `${baseUrl}/${endpoint}`;
         if (query) {
             const queryString = new URLSearchParams();
             for (const [key, value] of Object.entries(query)) {
@@ -68,8 +81,10 @@ class AmneziaApiService {
 
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
-                const fetchOptions: RequestInit = {
-                    ...options,
+                const fetchOptions = await this.getFetchOptions(serverId, method, server);
+
+                const fetchOptionsWithBody: RequestInit = {
+                    ...fetchOptions,
                     body: body ? JSON.stringify(body) : undefined,
                 };
 
@@ -84,7 +99,7 @@ class AmneziaApiService {
                 //     });
 
                 //     const rawResponse = await nodeFetch.default(url, {
-                //         ...fetchOptions,
+                //         ...fetchOptionsWithBody,
                 //         agent,
                 //     } as any);
 
@@ -99,8 +114,8 @@ class AmneziaApiService {
                 //         json: () => rawResponse.json() as Promise<any>,
                 //     };
                 // } else {
-                // const rawResponse = await fetch(url, fetchOptions);
-                const response = await fetch(url, fetchOptions);
+                // const rawResponse = await fetch(url, fetchOptionsWithBody);
+                const response = await fetch(url, fetchOptionsWithBody);
 
                 // response = {
                 //     ok: rawResponse.ok,
@@ -152,7 +167,7 @@ class AmneziaApiService {
 
                     throw new TRPCError({
                         code: getTrpcErrorCode(response.status),
-                        message: `Amnezia API error: ${await response.status}`,
+                        message: `Amnezia API error: ${await response.text()}`,
                     });
                 }
 
@@ -180,11 +195,16 @@ class AmneziaApiService {
         });
     }
 
-    async getConfigs(skip: number = 0, limit: number = 100): Promise<GetUsersResponse> {
+    async getConfigs(
+        serverId: number,
+        skip: number = 0,
+        limit: number = 100
+    ): Promise<GetClientsResponse> {
         try {
-            return await this.makeRequestWithRetry<GetUsersResponse>(
-                'users',
-                this.getFetchOptions('GET'),
+            return await this.makeRequestWithRetry<GetClientsResponse>(
+                serverId,
+                'clients',
+                'GET',
                 undefined,
                 { skip, limit }
             );
@@ -207,14 +227,16 @@ class AmneziaApiService {
     }
 
     async createConfig(
+        serverId: number,
         clientName: string,
         protocol: Protocol,
         expiresAt: number
-    ): Promise<CreateUserResponse> {
+    ): Promise<CreateClientResponse> {
         try {
-            return await this.makeRequestWithRetry<CreateUserResponse>(
-                'users',
-                this.getFetchOptions('POST'),
+            return await this.makeRequestWithRetry<CreateClientResponse>(
+                serverId,
+                'clients',
+                'POST',
                 {
                     clientName,
                     protocol,
@@ -239,16 +261,16 @@ class AmneziaApiService {
         }
     }
 
-    async deleteConfig(clientId: string, protocol: Protocol): Promise<MessageResponse> {
+    async deleteConfig(
+        serverId: number,
+        clientId: string,
+        protocol: Protocol
+    ): Promise<MessageResponse> {
         try {
-            return await this.makeRequestWithRetry<MessageResponse>(
-                'users',
-                this.getFetchOptions('DELETE'),
-                {
-                    clientId,
-                    protocol,
-                }
-            );
+            return await this.makeRequestWithRetry<MessageResponse>(serverId, 'clients', 'DELETE', {
+                clientId,
+                protocol,
+            });
         } catch (error) {
             if (error instanceof TRPCError && error.message.includes('Not found')) {
                 await logsService.createLog(
@@ -275,12 +297,9 @@ class AmneziaApiService {
         }
     }
 
-    async getServer(): Promise<GetServerResponse> {
+    async getServer(serverId: number): Promise<GetServerResponse> {
         try {
-            return await this.makeRequestWithRetry<GetServerResponse>(
-                'server',
-                this.getFetchOptions('GET')
-            );
+            return await this.makeRequestWithRetry<GetServerResponse>(serverId, 'server', 'GET');
         } catch (error) {
             await logsService.createLog(
                 'SERVER',
@@ -299,12 +318,9 @@ class AmneziaApiService {
         }
     }
 
-    async getServerBackup(): Promise<ServerBackup> {
+    async getServerBackup(serverId: number): Promise<ServerBackup> {
         try {
-            return await this.makeRequestWithRetry<ServerBackup>(
-                'server/backup',
-                this.getFetchOptions('GET')
-            );
+            return await this.makeRequestWithRetry<ServerBackup>(serverId, 'server/backup', 'GET');
         } catch (error) {
             await logsService.createLog(
                 'SERVER',
@@ -323,11 +339,12 @@ class AmneziaApiService {
         }
     }
 
-    async importServerBackup(body: ServerBackupZod): Promise<ServerBackup> {
+    async importServerBackup(serverId: number, body: ServerBackupZod): Promise<ServerBackup> {
         try {
             return await this.makeRequestWithRetry<ServerBackup>(
+                serverId,
                 'server/backup',
-                this.getFetchOptions('POST'),
+                'POST',
                 body
             );
         } catch (error) {
@@ -348,11 +365,12 @@ class AmneziaApiService {
         }
     }
 
-    async rebootServer(): Promise<MessageResponse> {
+    async rebootServer(serverId: number): Promise<MessageResponse> {
         try {
             return await this.makeRequestWithRetry<MessageResponse>(
+                serverId,
                 'server/reboot',
-                this.getFetchOptions('POST')
+                'POST'
             );
         } catch (error) {
             await logsService.createLog(
@@ -368,6 +386,31 @@ class AmneziaApiService {
             throw new TRPCError({
                 code: 'INTERNAL_SERVER_ERROR',
                 message: `Failed to reboot server: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            });
+        }
+    }
+
+    async getServerLoad(serverId: number): Promise<GetServerLoadResponse> {
+        try {
+            return await this.makeRequestWithRetry<GetServerLoadResponse>(
+                serverId,
+                'server/load',
+                'GET'
+            );
+        } catch (error) {
+            await logsService.createLog(
+                'SERVER',
+                'ERROR',
+                `Failed to load server: ${error instanceof TRPCError || error instanceof Error ? error.message : 'Unknown error'}`
+            );
+
+            if (error instanceof TRPCError) {
+                throw error;
+            }
+
+            throw new TRPCError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: `Failed to load server: ${error instanceof Error ? error.message : 'Unknown error'}`,
             });
         }
     }

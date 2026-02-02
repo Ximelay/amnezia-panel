@@ -11,9 +11,6 @@ export const env = createEnv({
             .enum(["development", "test", "production"])
             .default("development"),
         DATABASE_URL: z.string(),
-        AMNEZIA_API_HOST: z.string(),
-        AMNEZIA_API_PORT: z.string(),
-        AMNEZIA_API_KEY: z.string(),
         TELEGRAM_BOT_TOKEN: z.string().optional(),
         ENCRYPTION_KEY: z.string()
     },
@@ -34,9 +31,6 @@ export const env = createEnv({
     runtimeEnv: {
         NODE_ENV: process.env.NODE_ENV,
         DATABASE_URL: process.env.DATABASE_URL,
-        AMNEZIA_API_HOST: process.env.AMNEZIA_API_HOST,
-        AMNEZIA_API_PORT: process.env.AMNEZIA_API_PORT,
-        AMNEZIA_API_KEY: process.env.AMNEZIA_API_KEY,
         TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
         ENCRYPTION_KEY: process.env.ENCRYPTION_KEY
     },
