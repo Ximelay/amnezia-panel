@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -26,7 +27,7 @@ import { addMonths, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { api } from '@/trpc/react';
-import { protocolsMapping } from '@/lib/data/mappings';
+import { LanguagesMapping, protocolsMapping } from '@/lib/data/mappings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { createClientSchema, type createClientFormData } from '@/lib/schemas/clients';
@@ -36,14 +37,19 @@ export default function CreateClientPage() {
     const utils = api.useUtils();
     const router = useRouter();
 
-    const form = useForm<createClientFormData>({
+    const { data: serversData } = api.servers.getServers.useQuery();
+
+    const form = useForm<createClientFormData & { clientServerId?: string }>({
         resolver: zodResolver(createClientSchema),
         defaultValues: {
             name: '',
+            language: 'RUSSIAN',
             telegramId: '',
+            clientServerId: '',
             configs: [
                 {
-                    username: '',
+                    serverId: '',
+                    clientName: '',
                     expiresAt: '',
                     protocol: undefined,
                 },
@@ -56,8 +62,22 @@ export default function CreateClientPage() {
         name: 'configs',
     });
 
+    const watchClientServerId = form.watch('clientServerId');
     const watchClientName = form.watch('name');
     const watchConfigs = form.watch('configs');
+
+    useEffect(() => {
+        if (watchClientServerId) {
+            fields.forEach((_, index) => {
+                const currentServerId = form.getValues(`configs.${index}.serverId`);
+                if (!currentServerId) {
+                    form.setValue(`configs.${index}.serverId`, watchClientServerId, {
+                        shouldValidate: true,
+                    });
+                }
+            });
+        }
+    }, [watchClientServerId, fields, form]);
 
     const createClientWithConfigs = api.clients.createClient.useMutation({
         onSuccess: () => {
@@ -72,26 +92,33 @@ export default function CreateClientPage() {
         },
     });
 
-    const onSubmit = (data: createClientFormData) => {
-        const configsWithUsernames = data.configs.map((config) => ({
+    const onSubmit = (data: createClientFormData & { clientServerId?: string }) => {
+        const configsWithClientNames = data.configs.map((config) => ({
             ...config,
-            username:
-                data.name && config.username ? `${data.name}-${config.username}` : config.username,
+            serverId: config.serverId || data.clientServerId || '',
+            clientName:
+                data.name && config.clientName
+                    ? `${data.name}-${config.clientName}`
+                    : config.clientName,
         }));
 
         createClientWithConfigs.mutate({
             name: data.name,
             telegramId: data.telegramId || undefined,
-            configs: configsWithUsernames,
+            language: data.language,
+            configs: configsWithClientNames,
         });
     };
 
     const addConfig = () => {
-        append({
-            username: '',
+        const newConfig = {
+            serverId: watchClientServerId || '',
+            clientName: '',
             expiresAt: '',
-            protocol: 'AMNEZIAWG',
-        });
+            protocol: 'AMNEZIAWG' as const,
+        };
+
+        append(newConfig);
     };
 
     const setQuickDate = (monthsToAdd: number, index: number) => {
@@ -102,6 +129,18 @@ export default function CreateClientPage() {
             shouldValidate: true,
             shouldDirty: true,
             shouldTouch: true,
+        });
+    };
+
+    const handleConfigServerChange = (index: number, serverId: string) => {
+        form.setValue(`configs.${index}.serverId`, serverId, {
+            shouldValidate: true,
+        });
+    };
+
+    const clearConfigServer = (index: number) => {
+        form.setValue(`configs.${index}.serverId`, watchClientServerId || '', {
+            shouldValidate: true,
         });
     };
 
@@ -135,6 +174,74 @@ export default function CreateClientPage() {
                                         <FormControl>
                                             <Input placeholder="Enter client name" {...field} />
                                         </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {/* Новое поле: выбор сервера для клиента */}
+                            <FormField
+                                control={form.control}
+                                name="clientServerId"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>
+                                            Default Server{' '}
+                                            <span className="text-destructive">*</span>
+                                        </FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select default server" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {serversData?.map((server) => (
+                                                    <SelectItem
+                                                        key={server.id}
+                                                        value={String(server.id)}>
+                                                        {server.name}
+                                                    </SelectItem>
+                                                )) || (
+                                                    <SelectItem value="" disabled>
+                                                        No servers available
+                                                    </SelectItem>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                        <div className="text-muted-foreground mt-1 text-xs">
+                                            This server will be used for all configs unless
+                                            overridden
+                                        </div>
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="language"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>
+                                            Language <span className="text-destructive">*</span>
+                                        </FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select language" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {Object.entries(LanguagesMapping).map(
+                                                    ([value, label]) => (
+                                                        <SelectItem key={value} value={value}>
+                                                            {label}
+                                                        </SelectItem>
+                                                    )
+                                                )}
+                                            </SelectContent>
+                                        </Select>
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -197,11 +304,21 @@ export default function CreateClientPage() {
                             ) : (
                                 <div className="space-y-6">
                                     {fields.map((field, index) => {
-                                        const configUsername = watchConfigs[index]?.username || '';
-                                        const fullUsername =
-                                            watchClientName && configUsername
-                                                ? `${watchClientName}-${configUsername}`
-                                                : configUsername || '[waiting for input]';
+                                        const configServerId = watchConfigs[index]?.serverId;
+                                        const configClientName =
+                                            watchConfigs[index]?.clientName || '';
+                                        const fullClientName =
+                                            watchClientName && configClientName
+                                                ? `${watchClientName}-${configClientName}`
+                                                : configClientName || '[waiting for input]';
+
+                                        const clientServer = serversData?.find(
+                                            (server) => String(server.id) === watchClientServerId
+                                        );
+
+                                        const selectedServer = serversData?.find(
+                                            (server) => String(server.id) === configServerId
+                                        );
 
                                         return (
                                             <div
@@ -223,53 +340,65 @@ export default function CreateClientPage() {
                                                     )}
                                                 </div>
 
-                                                <div className="bg-muted rounded-md p-3">
-                                                    <div className="mb-1 text-sm font-medium">
-                                                        Generated Username:
+                                                <div className="bg-muted/50 rounded-md p-3">
+                                                    <div className="mb-2 flex items-center justify-between">
+                                                        <div className="text-sm font-medium">
+                                                            Server Configuration:
+                                                        </div>
+                                                        {configServerId &&
+                                                            configServerId !==
+                                                                watchClientServerId && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() =>
+                                                                        clearConfigServer(index)
+                                                                    }
+                                                                    className="h-7 text-xs">
+                                                                    Reset to client server
+                                                                </Button>
+                                                            )}
                                                     </div>
-                                                    <div className="font-mono text-sm">
-                                                        {watchClientName ? (
-                                                            <>
-                                                                <span className="text-blue-600">
-                                                                    {watchClientName}
-                                                                </span>
-                                                                <span className="text-muted-foreground">
-                                                                    -
-                                                                </span>
-                                                                <span className="text-green-600">
-                                                                    {configUsername || '[username]'}
-                                                                </span>
-                                                            </>
-                                                        ) : (
+
+                                                    {configServerId === watchClientServerId ||
+                                                    !configServerId ? (
+                                                        <div className="text-sm">
                                                             <span className="text-muted-foreground">
-                                                                Enter client name to see full
-                                                                username
+                                                                Using client's server:{' '}
                                                             </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-muted-foreground mt-1 text-xs">
-                                                        Final username:{' '}
-                                                        <Badge variant="secondary">
-                                                            {fullUsername}
-                                                        </Badge>
-                                                    </div>
+                                                            <span className="font-medium">
+                                                                {clientServer?.name ||
+                                                                    'Not selected'}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-sm">
+                                                            <span className="text-muted-foreground">
+                                                                Custom server:{' '}
+                                                            </span>
+                                                            <span className="font-medium">
+                                                                {selectedServer?.name}
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                                     <FormField
                                                         control={form.control}
-                                                        name={`configs.${index}.username`}
+                                                        name={`configs.${index}.clientName`}
                                                         render={({ field }) => (
                                                             <FormItem>
                                                                 <FormLabel>
-                                                                    Username Suffix{' '}
+                                                                    ClientName Suffix{' '}
                                                                     <span className="text-destructive">
                                                                         *
                                                                     </span>
                                                                 </FormLabel>
                                                                 <FormControl>
                                                                     <Input
-                                                                        placeholder="Enter username suffix"
+                                                                        placeholder="Enter clientName suffix"
                                                                         {...field}
                                                                     />
                                                                 </FormControl>
@@ -278,6 +407,45 @@ export default function CreateClientPage() {
                                                         )}
                                                     />
 
+                                                    <div className="space-y-2">
+                                                        <FormLabel>Server (Optional)</FormLabel>
+                                                        <Select
+                                                            value={configServerId || ''}
+                                                            onValueChange={(value) =>
+                                                                handleConfigServerChange(
+                                                                    index,
+                                                                    value
+                                                                )
+                                                            }>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select custom server" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem
+                                                                    value={
+                                                                        watchClientServerId || ''
+                                                                    }>
+                                                                    Use client's server:{' '}
+                                                                    {clientServer?.name ||
+                                                                        'Not selected'}
+                                                                </SelectItem>
+                                                                {serversData?.map((server) => (
+                                                                    <SelectItem
+                                                                        key={server.id}
+                                                                        value={String(server.id)}>
+                                                                        {server.name}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <div className="text-muted-foreground text-xs">
+                                                            Leave as "Use client's server" to
+                                                            inherit from above
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                                     <FormField
                                                         control={form.control}
                                                         name={`configs.${index}.protocol`}
@@ -313,6 +481,39 @@ export default function CreateClientPage() {
                                                             </FormItem>
                                                         )}
                                                     />
+                                                </div>
+
+                                                <div className="bg-muted rounded-md p-3">
+                                                    <div className="mb-1 text-sm font-medium">
+                                                        Generated ClientName:
+                                                    </div>
+                                                    <div className="font-mono text-sm">
+                                                        {watchClientName ? (
+                                                            <>
+                                                                <span className="text-blue-600">
+                                                                    {watchClientName}
+                                                                </span>
+                                                                <span className="text-muted-foreground">
+                                                                    -
+                                                                </span>
+                                                                <span className="text-green-600">
+                                                                    {configClientName ||
+                                                                        '[clientName]'}
+                                                                </span>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-muted-foreground">
+                                                                Enter client name to see full
+                                                                clientName
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-muted-foreground mt-1 text-xs">
+                                                        Final clientName:{' '}
+                                                        <Badge variant="secondary">
+                                                            {fullClientName}
+                                                        </Badge>
+                                                    </div>
                                                 </div>
 
                                                 <FormField
@@ -440,7 +641,8 @@ export default function CreateClientPage() {
                                 form.reset();
                                 remove();
                                 append({
-                                    username: '',
+                                    serverId: '',
+                                    clientName: '',
                                     expiresAt: '',
                                     protocol: 'AMNEZIAWG',
                                 });

@@ -42,19 +42,34 @@ import MultipleSelector from '@/components/ui/multi-select';
 
 export function CreateConfigDialog() {
     const [open, setOpen] = useState(false);
-    const [usernameTouched, setUsernameTouched] = useState(false);
+    const [clientNameTouched, setClientNameTouched] = useState(false);
     const utils = api.useUtils();
-
-    const { data: clients, isLoading: isLoadingClients } = api.clients.getClients.useQuery();
 
     const form = useForm<createConfigFormData>({
         resolver: zodResolver(createConfigSchema),
         defaultValues: {
             clientId: '',
-            username: '',
+            serverId: '',
+            clientName: '',
             expiresAt: '',
             protocol: undefined,
         },
+    });
+
+    const { data: servers, isLoading: isLoadingServers } = api.servers.getServers.useQuery();
+
+    const [localServers, setLocalServers] = useState<typeof servers>([]);
+
+    useEffect(() => {
+        if (servers) {
+            setLocalServers(servers);
+        }
+    }, [servers]);
+
+    const watchServerId = form.watch('serverId');
+
+    const { data: clients, isLoading: isLoadingClients } = api.clients.getClients.useQuery({
+        serverId: watchServerId,
     });
 
     const watchClientId = form.watch('clientId');
@@ -71,17 +86,17 @@ export function CreateConfigDialog() {
         if (watchClientId && watchClientId !== '') {
             const selectedClient = clients?.find((client) => String(client.id) === watchClientId);
             if (selectedClient) {
-                form.setValue('username', `${selectedClient.name}-`, {
+                form.setValue('clientName', `${selectedClient.name}-`, {
                     shouldValidate: true,
                 });
             }
         }
-    }, [watchClientId, clients, form, usernameTouched]);
+    }, [watchClientId, clients, form, clientNameTouched]);
 
     useEffect(() => {
         const subscription = form.watch((_, { name }) => {
-            if (name === 'username') {
-                setUsernameTouched(true);
+            if (name === 'clientName') {
+                setClientNameTouched(true);
             }
         });
         return () => subscription.unsubscribe();
@@ -89,7 +104,7 @@ export function CreateConfigDialog() {
 
     useEffect(() => {
         if (!open) {
-            setUsernameTouched(false);
+            setClientNameTouched(false);
         }
     }, [open]);
 
@@ -98,7 +113,7 @@ export function CreateConfigDialog() {
             toast.success('Config was created successfully');
             utils.clients.getClientsWithConfigs.invalidate();
             setOpen(false);
-            setUsernameTouched(false);
+            setClientNameTouched(false);
             form.reset();
         },
         onError: (error) => {
@@ -140,6 +155,71 @@ export function CreateConfigDialog() {
 
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        {isLoadingServers || !localServers ? (
+                            <div className="flex items-center justify-center py-4">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span className="ml-2 text-sm">Loading servers...</span>
+                            </div>
+                        ) : (
+                            <FormField
+                                control={form.control}
+                                name="serverId"
+                                render={({ field }) => {
+                                    const serverOptions = useMemo(() => {
+                                        if (!localServers) return [];
+                                        return localServers.map((server) => ({
+                                            value: String(server.id),
+                                            label: server.name,
+                                        }));
+                                    }, [localServers]);
+
+                                    const currentValue = useMemo(() => {
+                                        if (!field.value) return [];
+                                        const server = localServers?.find(
+                                            (c) => String(c.id) === String(field.value)
+                                        );
+                                        return server
+                                            ? [
+                                                  {
+                                                      value: String(server.id),
+                                                      label: server.name,
+                                                  },
+                                              ]
+                                            : [];
+                                    }, [field.value, localServers]);
+
+                                    return (
+                                        <FormItem>
+                                            <FormLabel>Server <span className="text-destructive">*</span></FormLabel>
+                                            <MultipleSelector
+                                                value={currentValue}
+                                                onChange={(selectedOptions) => {
+                                                    if (selectedOptions.length === 0) {
+                                                        field.onChange('');
+                                                    } else {
+                                                        field.onChange(
+                                                            selectedOptions[0]?.value || ''
+                                                        );
+                                                    }
+                                                }}
+                                                options={serverOptions}
+                                                placeholder="Search server..."
+                                                emptyIndicator={
+                                                    <p className="text-center text-sm">
+                                                        No results found
+                                                    </p>
+                                                }
+                                                className="w-full"
+                                                maxSelected={1}
+                                                hidePlaceholderWhenSelected
+                                            />
+                                            <FormMessage />
+                                        </FormItem>
+                                    );
+                                }}
+                            />
+                        )}
+
                         {isLoadingClients || !localClients ? (
                             <div className="flex items-center justify-center py-4">
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -207,18 +287,18 @@ export function CreateConfigDialog() {
 
                         <FormField
                             control={form.control}
-                            name="username"
+                            name="clientName"
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>
-                                        Username <span className="text-destructive">*</span>
+                                        Config name <span className="text-destructive">*</span>
                                     </FormLabel>
                                     <FormControl>
                                         <Input
-                                            placeholder="Enter username"
+                                            placeholder="Enter config name"
                                             {...field}
                                             onChange={(e) => {
-                                                setUsernameTouched(true);
+                                                setClientNameTouched(true);
                                                 field.onChange(e);
                                             }}
                                         />

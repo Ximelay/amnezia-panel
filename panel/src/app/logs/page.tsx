@@ -73,7 +73,7 @@ export default function LogsPage() {
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState('25');
 
-    const { data, isLoading, isFetching, error } = api.server.getLogs.useQuery({
+    const { data, isLoading, isFetching, error } = api.servers.getLogs.useQuery({
         search,
         page,
         limit,
@@ -125,7 +125,7 @@ export default function LogsPage() {
                                 <Select
                                     onValueChange={(value) => setActiveLogType(value)}
                                     defaultValue="All">
-                                    <SelectTrigger className="w-[200px]">
+                                    <SelectTrigger className="w-50">
                                         <SelectValue placeholder="Log type" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -142,7 +142,7 @@ export default function LogsPage() {
                                 <Select
                                     onValueChange={(value) => setActiveLevelType(value)}
                                     defaultValue="All">
-                                    <SelectTrigger className="w-[200px]">
+                                    <SelectTrigger className="w-50">
                                         <SelectValue placeholder="Level type" />
                                     </SelectTrigger>
                                     <SelectContent>

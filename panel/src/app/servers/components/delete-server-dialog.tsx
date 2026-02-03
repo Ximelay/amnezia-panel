@@ -15,24 +15,22 @@ import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '@/trpc/react';
 import { toast } from 'sonner';
-import type { Protocols } from 'prisma/generated/enums';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Props {
-    id: string;
-    serverId: number;
-    protocol: Protocols;
+    id: number;
 }
 
-export default function DeleteConfigDialog({ id, serverId, protocol }: Readonly<Props>) {
+export default function DeleteServerDialog({ id }: Readonly<Props>) {
     const [isDelete, setIsDelete] = useState(false);
 
     const utils = api.useUtils();
 
-    const deleteConfig = api.configs.deleteConfig.useMutation({
+    const deleteServer = api.servers.deleteServer.useMutation({
         onSuccess: () => {
-            utils.clients.getClientsWithConfigs.invalidate();
-            toast.success('Config was successfully deleted');
+            utils.servers.getServers.invalidate();
+            utils.servers.getServersTable.invalidate();
+            toast.success('Server was successfully deleted');
         },
         onError: (error) => {
             toast.error('Error');
@@ -40,8 +38,8 @@ export default function DeleteConfigDialog({ id, serverId, protocol }: Readonly<
         },
     });
 
-    const handleDelete = () => {
-        deleteConfig.mutate({ id, serverId, protocol });
+    const handleDeleteServer = () => {
+        deleteServer.mutate({ id });
     };
 
     return (
@@ -57,7 +55,7 @@ export default function DeleteConfigDialog({ id, serverId, protocol }: Readonly<
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                    <p>Delete config</p>
+                    <p>Delete server</p>
                 </TooltipContent>
             </Tooltip>
 
@@ -66,13 +64,13 @@ export default function DeleteConfigDialog({ id, serverId, protocol }: Readonly<
                     <AlertDialogHeader>
                         <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This action cannot be canceled. This will permanently delete the client
-                            config.
+                            This action cannot be canceled. This will permanently delete the server
+                            and all related objects will also be deleted.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                        <AlertDialogAction onClick={handleDeleteServer}>Delete</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

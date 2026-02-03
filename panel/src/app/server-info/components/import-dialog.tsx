@@ -16,7 +16,11 @@ import { Loader2, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-export const ImportBackupDialog = () => {
+interface Props {
+    serverId: number;
+}
+
+export const ImportBackupDialog = ({ serverId }: Props) => {
     const [open, setOpen] = useState(false);
     const [file, setFile] = useState<File[] | undefined>();
 
@@ -26,7 +30,7 @@ export const ImportBackupDialog = () => {
         }
     };
 
-    const importBackup = api.server.importBackup.useMutation({
+    const importBackup = api.servers.importBackup.useMutation({
         onSuccess: () => {
             toast.success('Backup was imported successfully');
             setOpen(false);
@@ -52,6 +56,7 @@ export const ImportBackupDialog = () => {
             }
 
             importBackup.mutate({
+                serverId,
                 fileContent,
             });
         } catch (error) {

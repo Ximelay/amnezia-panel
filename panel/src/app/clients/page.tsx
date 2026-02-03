@@ -14,13 +14,32 @@ import { protocolsMapping } from '@/lib/data/mappings';
 import { toast } from 'sonner';
 import { telegramToastError } from '@/lib/utils';
 import { ConfigsWithClientsTable } from './components/clients-table';
+import MultipleSelector from '@/components/ui/multi-select';
+
+type ServerOption = {
+    value: string;
+    label: string;
+};
 
 export default function ClientsPage() {
     const [search, setSearch] = useState('');
     const [protocolFilter, setProtocolFilter] = useState('All');
+    const [serverFilter, setServerFilter] = useState<ServerOption[]>([]);
     const router = useRouter();
 
+    const { data: serversData } = api.servers.getServers.useQuery();
+
+    const serverOptions = useMemo(() => {
+        return (
+            serversData?.map((server) => ({
+                value: String(server.id),
+                label: server.name,
+            })) || []
+        );
+    }, [serversData]);
+
     const { data, isLoading, isFetching, error } = api.clients.getClientsWithConfigs.useQuery({
+        serverId: serverFilter[0]?.value || '1',
         search,
         protocolFilter,
     });
@@ -48,6 +67,10 @@ export default function ClientsPage() {
 
     const onSubmit = () => {
         sendMessages.mutate();
+    };
+
+    const handleServerChange = (selected: ServerOption[]) => {
+        setServerFilter(selected);
     };
 
     return (
@@ -98,6 +121,18 @@ export default function ClientsPage() {
                                     {protocolsMapping['AMNEZIAWG']}
                                 </Button>
                             </div>
+
+                            <div className="w-50">
+                                <MultipleSelector
+                                    value={serverFilter}
+                                    onChange={handleServerChange}
+                                    defaultOptions={serverOptions}
+                                    placeholder="Select a server"
+                                    maxSelected={1}
+                                    hidePlaceholderWhenSelected={true}
+                                />
+                            </div>
+
                             <InputSearchLoader
                                 placeholder="Search by config name..."
                                 onChange={debouncedChangeHandler}

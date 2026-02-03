@@ -15,7 +15,7 @@ import { telegramService } from '@/server/services/telegram/telegram';
 
 export const clientsRouter = createTRPCRouter({
     getClients: publicProcedure
-        .input(z.object({ serverId: z.number().optional() }))
+        .input(z.object({ serverId: z.string().optional() }))
         .query(async ({ input, ctx }) => {
             const { serverId } = input;
 
@@ -24,7 +24,7 @@ export const clientsRouter = createTRPCRouter({
                     ...(serverId && {
                         Configs: {
                             some: {
-                                serverId,
+                                serverId: Number(serverId),
                             },
                         },
                     }),
@@ -39,13 +39,14 @@ export const clientsRouter = createTRPCRouter({
     getClientsWithConfigs: publicProcedure
         .input(
             z.object({
-                serverId: z.number(),
+                serverId: z.string(),
                 search: z.string().optional(),
                 protocolFilter: z.string() as z.ZodType<ProtocolsFilter>,
             })
         )
         .query(async ({ ctx, input }) => {
-            const { serverId, search, protocolFilter } = input;
+            const { search, protocolFilter } = input;
+            const serverId = Number(input.serverId);
 
             const apiConfigs = await amneziaApiService.getConfigs(serverId);
 
@@ -81,6 +82,7 @@ export const clientsRouter = createTRPCRouter({
                         expiresAt: true,
                         protocol: true,
                         clientId: true,
+                        serverId: true,
                     },
                     orderBy: {
                         createdAt: 'desc',
@@ -148,6 +150,7 @@ export const clientsRouter = createTRPCRouter({
                             : null,
                         protocol: apiProtocolsMapping[apiDevice.device.protocol],
                         clientId: null,
+                        serverId,
                         online: apiDevice.device.online,
                         lastHandshake: String(apiDevice.device.lastHandshake),
                         traffic: apiDevice.device.traffic,

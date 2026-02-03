@@ -47,7 +47,7 @@ interface ConfigsWithClientsProps {
         configsCount: number;
         configs: Array<{
             id: string;
-            username: string;
+            clientName: string;
             protocol: Protocols;
             online: boolean;
             lastHandshake: string | null;
@@ -60,11 +60,12 @@ interface ConfigsWithClientsProps {
             expiresAt: string | null;
             createdAt: Date;
             clientId: number | null;
+            serverId: number;
         }>;
     }>;
     orphanConfigs: Array<{
         id: string;
-        username: string;
+        clientName: string;
         protocol: Protocols;
         online: boolean;
         lastHandshake: string | null;
@@ -77,6 +78,7 @@ interface ConfigsWithClientsProps {
         expiresAt: string | null;
         createdAt: Date;
         clientId: number | null;
+        serverId: number;
     }>;
 }
 
@@ -100,14 +102,14 @@ export function ConfigsWithClientsTable({
         <Table>
             <TableHeader>
                 <TableRow>
-                    <TableHead className="w-[50px]"></TableHead>
+                    <TableHead className="w-12.5"></TableHead>
                     <TableHead>User</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Protocol</TableHead>
                     <TableHead>Traffic</TableHead>
                     <TableHead>Last handshake</TableHead>
                     <TableHead>Expires at</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
+                    <TableHead className="w-25">Actions</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -141,7 +143,7 @@ function ClientRow({
         configsCount: number;
         configs: Array<{
             id: string;
-            username: string;
+            clientName: string;
             protocol: Protocols;
             online: boolean;
             lastHandshake: string | null;
@@ -154,6 +156,7 @@ function ClientRow({
             expiresAt: string | null;
             createdAt: Date;
             clientId: number | null;
+            serverId: number;
         }>;
     };
     isExpanded: boolean;
@@ -348,7 +351,7 @@ function ConfigRow({
 }: Readonly<{
     config: {
         id: string;
-        username: string;
+        clientName: string;
         protocol: Protocols;
         online: boolean;
         lastHandshake: string | null;
@@ -361,6 +364,7 @@ function ConfigRow({
         expiresAt: string | null;
         createdAt: Date;
         clientId: number | null;
+        serverId: number;
     };
     isNested?: boolean;
 }>) {
@@ -385,7 +389,7 @@ function ConfigRow({
             <TableCell>{isNested && <div className="ml-4"></div>}</TableCell>
             <TableCell>
                 <div className={`flex items-center gap-2 ${isNested ? 'ml-6' : ''}`}>
-                    <span>{config.username}</span>
+                    <span>{config.clientName}</span>
                 </div>
             </TableCell>
             <TableCell>
@@ -431,7 +435,11 @@ function ConfigRow({
                         </Tooltip>
                     )}
                     <ConfigDialog config={config} />
-                    <DeleteConfigDialog id={config.id} protocol={config.protocol} />
+                    <DeleteConfigDialog
+                        id={config.id}
+                        serverId={config.serverId}
+                        protocol={config.protocol}
+                    />
                 </div>
             </TableCell>
         </TableRow>

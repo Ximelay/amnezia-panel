@@ -7,8 +7,12 @@ import { ImportBackupDialog } from './import-dialog';
 import { api } from '@/trpc/react';
 import { toast } from 'sonner';
 
-export default function ServerActions() {
-    const downloadBackup = api.server.downloadBackup.useMutation({
+interface Props {
+    serverId: number;
+}
+
+export default function ServerActions({ serverId }: Props) {
+    const downloadBackup = api.servers.downloadBackup.useMutation({
         onSuccess: () => {
             toast.success('Backup was downloaded successfully');
         },
@@ -20,7 +24,7 @@ export default function ServerActions() {
 
     const handleDownload = async () => {
         try {
-            const result = await downloadBackup.mutateAsync();
+            const result = await downloadBackup.mutateAsync({ serverId });
             const binaryString = atob(result.content);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
@@ -44,7 +48,7 @@ export default function ServerActions() {
         }
     };
 
-    const rebootServer = api.server.rebootServer.useMutation({
+    const rebootServer = api.servers.rebootServer.useMutation({
         onSuccess: () => {
             toast.success('Server was rebooted successfully');
         },
@@ -55,7 +59,7 @@ export default function ServerActions() {
     });
 
     const handleReboot = () => {
-        rebootServer.mutate();
+        rebootServer.mutate({ serverId });
     };
 
     return (
@@ -64,7 +68,7 @@ export default function ServerActions() {
                 <CardTitle>Server Actions</CardTitle>
                 <CardDescription>Manage server configuration and operations</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4 justify-between h-full">
+            <CardContent className="flex h-full flex-col justify-between gap-4">
                 <div className="flex flex-col items-start gap-3">
                     <Button
                         onClick={handleDownload}
@@ -82,7 +86,7 @@ export default function ServerActions() {
                         )}
                     </Button>
 
-                    <ImportBackupDialog />
+                    <ImportBackupDialog serverId={serverId} />
 
                     <Button
                         onClick={handleReboot}

@@ -1,10 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-    apiProtocolsMapping,
-    protocolsApiMapping,
-    protocolsServerMapping,
-} from '@/lib/data/mappings';
+import { apiProtocolsMapping, protocolsServerMapping } from '@/lib/data/mappings';
 import { getProtocolColor } from '@/lib/utils';
 
 interface ServerInfoProps {

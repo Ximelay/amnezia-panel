@@ -44,7 +44,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 interface ConfigInfoDialogProps {
     config: {
         id: string;
-        username: string;
+        clientName: string;
         protocol: Protocols;
         online: boolean;
         lastHandshake: string | null;
@@ -57,6 +57,7 @@ interface ConfigInfoDialogProps {
         expiresAt: string | null;
         createdAt: Date;
         clientId: number | null;
+        serverId: number;
     };
 }
 
@@ -69,15 +70,13 @@ export function ConfigDialog({ config }: ConfigInfoDialogProps) {
     const utils = api.useUtils();
 
     const { data: vpnKey, isLoading: isLoadingKey } = api.configs.getVpnKey.useQuery(
-        {
-            id: config.id,
-        },
-        {
-            enabled: open,
-        }
+        { id: config.id },
+        { enabled: open }
     );
 
-    const { data: clients } = api.clients.getClients.useQuery();
+    const { data: clients } = api.clients.getClients.useQuery({
+        serverId: String(config.serverId),
+    });
 
     const getTruncatedKey = (key: string): string => {
         const protocolMatch = key.match(/^([a-zA-Z]+):\/\//);
@@ -154,7 +153,7 @@ export function ConfigDialog({ config }: ConfigInfoDialogProps) {
                             </Label>
                             <div className="flex items-center gap-2">
                                 <User className="text-muted-foreground h-4 w-4" />
-                                <span className="font-medium">{config.username}</span>
+                                <span className="font-medium">{config.clientName}</span>
                             </div>
                         </div>
 

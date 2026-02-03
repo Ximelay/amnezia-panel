@@ -13,7 +13,7 @@ model Servers {
     createdAt DateTime  @default(now())
     name      String
     ip        String
-    port      String
+    port      Int
     apiKey    Json
     Configs   Configs[]
 }

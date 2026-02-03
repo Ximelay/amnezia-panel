@@ -89,7 +89,7 @@ export function UpdateClientDialog({ id, name, telegramId }: Props) {
                     <p>Edit client</p>
                 </TooltipContent>
             </Tooltip>
-            <DialogContent className="sm:max-w-[525px]">
+            <DialogContent className="sm:max-w-131.25">
                 <DialogHeader>
                     <DialogTitle>Update client</DialogTitle>
                     <DialogDescription>Change client info</DialogDescription>

@@ -1,0 +1,211 @@
+import { z } from 'zod';
+
+import { createTRPCRouter, publicProcedure } from '@/server/api/trpc';
+import { logsService } from '@/server/services/logs';
+import type { LevelTypesFilter } from '@/server/enums';
+import type { LogTypes } from 'prisma/generated/enums';
+import { amneziaApiService } from '@/server/services/amnezia-api';
+import { serverBackupSchema } from '@/server/interfaces/amnezia-api';
+import { TRPCError } from '@trpc/server';
+import { upsertServerSchema } from '@/lib/schemas/servers';
+import { encryptionService } from '@/server/services/encryption';
+import type { Prisma } from 'prisma/generated/client';
+
+export const serversRouter = createTRPCRouter({
+    getServers: publicProcedure.query(async ({ ctx }) => {
+        return await ctx.db.servers.findMany({
+            select: {
+                id: true,
+                name: true,
+            },
+        });
+    }),
+
+    getServerInfo: publicProcedure
+        .input(z.object({ serverId: z.number() }))
+        .query(async ({ input }) => {
+            const { serverId } = input;
+
+            return await amneziaApiService.getServer(serverId);
+        }),
+
+    getServerLoad: publicProcedure
+        .input(z.object({ serverId: z.number() }))
+        .query(async ({ input }) => {
+            const { serverId } = input;
+        }),
+
+    getLogs: publicProcedure
+        .input(
+            z.object({
+                search: z.string().optional(),
+                page: z.number().min(1),
+                limit: z.string(),
+                levelType: z.string() as z.ZodType<LevelTypesFilter>,
+                logType: z.string() as z.ZodType<LogTypes>,
+            })
+        )
+        .query(async ({ input }) => {
+            return await logsService.getLogs(input);
+        }),
+
+    downloadBackup: publicProcedure
+        .input(z.object({ serverId: z.number() }))
+        .mutation(async ({ input }) => {
+            const { serverId } = input;
+
+            const backup = await amneziaApiService.getServerBackup(serverId);
+            const jsonString = JSON.stringify(backup, null, 2);
+            const buffer = Buffer.from(jsonString, 'utf-8');
+            const base64Content = buffer.toString('base64');
+
+            const currentDate = new Date()
+                .toLocaleDateString('en-US', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    year: 'numeric',
+                })
+                .replace(/\//g, '-');
+
+            const filename = `server-backup-${currentDate}.json`;
+
+            await logsService.createLog(
+                'SERVER',
+                'INFO',
+                'Server backup was downloaded successfully'
+            );
+
+            return {
+                filename,
+                content: base64Content,
+                mimeType: 'application/json',
+            };
+        }),
+
+    importBackup: publicProcedure
+        .input(z.object({ serverId: z.number(), fileContent: z.string() }))
+        .mutation(async ({ input }) => {
+            const { serverId, fileContent } = input;
+
+            const backupFile = await (async () => {
+                try {
+                    const parsed = JSON.parse(fileContent);
+                    return serverBackupSchema.parse(parsed);
+                } catch {
+                    await logsService.createLog('SERVER', 'ERROR', 'Server backup was not parsed');
+
+                    throw new TRPCError({
+                        code: 'BAD_REQUEST',
+                        message: 'Invalid Backup file',
+                    });
+                }
+            })();
+
+            await amneziaApiService.importServerBackup(serverId, backupFile);
+
+            await logsService.createLog(
+                'SERVER',
+                'INFO',
+                'Server backup was imported successfully'
+            );
+        }),
+
+    rebootServer: publicProcedure
+        .input(z.object({ serverId: z.number() }))
+        .mutation(async ({ input }) => {
+            const { serverId } = input;
+
+            await logsService.createLog('SERVER', 'WARNING', 'Server was rebooted');
+
+            await amneziaApiService.rebootServer(serverId);
+        }),
+
+    upsertServer: publicProcedure.input(upsertServerSchema).mutation(async ({ ctx, input }) => {
+        const { id, name, ip, port, apiKey } = input;
+
+        const encryptedApiKey = encryptionService.encrypt(apiKey);
+
+        await ctx.db.servers.upsert({
+            where: { id: id || -1 },
+            create: { name, ip, port, apiKey: encryptedApiKey },
+            update: { name, ip, port, apiKey: encryptedApiKey },
+        });
+
+        await logsService.createLog('SERVER', 'INFO', `Server ${name} was saved`);
+    }),
+
+    deleteServer: publicProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ ctx, input }) => {
+            const { id } = input;
+
+            await ctx.db.configs.deleteMany({
+                where: { serverId: id },
+            });
+
+            const deletedServer = await ctx.db.servers.delete({
+                where: { id },
+                select: { name: true },
+            });
+
+            await logsService.createLog('SERVER', 'WARNING', `Server ${deletedServer.name} was deleted with configs`);
+        }),
+
+    getServersTable: publicProcedure
+        .input(
+            z.object({
+                search: z.string().optional(),
+                page: z.number().min(1),
+                limit: z.string(),
+            })
+        )
+        .query(async ({ ctx, input }) => {
+            const { search, page, limit } = input;
+            const numberLimit = Number(limit);
+            const offset = (page - 1) * numberLimit;
+
+            const whereConditions: Prisma.ServersWhereInput = {
+                name: search
+                    ? {
+                          contains: search,
+                          mode: 'insensitive',
+                      }
+                    : undefined,
+            };
+
+            const [servers, totalItems] = await Promise.all([
+                ctx.db.servers.findMany({
+                    where: whereConditions,
+                    select: {
+                        id: true,
+                        name: true,
+                        ip: true,
+                        port: true,
+                        apiKey: true,
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                    take: numberLimit,
+                    skip: offset,
+                }),
+
+                ctx.db.servers.count({
+                    where: whereConditions,
+                }),
+            ]);
+
+            const serversWithApi = servers.map((server) => ({
+                id: server.id,
+                name: server.name,
+                ip: server.ip,
+                port: server.port,
+                apiKey: encryptionService.decryptField(server.apiKey),
+            }));
+
+            return {
+                servers: serversWithApi,
+                totalItems,
+            };
+        }),
+});

@@ -16,6 +16,20 @@ export type Navigation = {
 export const navigation: Navigation = {
     navMain: [
         {
+            title: 'Servers',
+            url: '#',
+            items: [
+                {
+                    title: 'Servers',
+                    url: '/servers',
+                },
+                {
+                    title: 'Server Info',
+                    url: '/server-info',
+                },
+            ],
+        },
+        {
             title: 'Clients',
             url: '#',
             items: [
@@ -34,12 +48,12 @@ export const navigation: Navigation = {
             url: '#',
             items: [
                 {
-                    title: 'Server',
-                    url: '/server',
-                },
-                {
                     title: 'Logs',
                     url: '/logs',
+                },
+                {
+                    title: 'Notification',
+                    url: '/notification',
                 },
             ],
         },
