@@ -32,23 +32,40 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { createClientSchema, type createClientFormData } from '@/lib/schemas/clients';
 import { useRouter } from 'next/navigation';
+import MultipleSelector from '@/components/ui/multi-select';
 
 export default function CreateClientPage() {
     const utils = api.useUtils();
     const router = useRouter();
 
-    const { data: serversData } = api.servers.getServers.useQuery();
+    const { data: serversData, isLoading: isLoadingServers } = api.servers.getServers.useQuery();
+
+    const serverOptions = useMemo(() => {
+        if (!serversData) return [];
+        return serversData.map((server) => ({
+            value: String(server.id),
+            label: server.name,
+        }));
+    }, [serversData]);
+
+    const [localServers, setLocalServers] = useState<typeof serversData>([]);
+
+    useEffect(() => {
+        if (serversData) {
+            setLocalServers(serversData);
+        }
+    }, [serversData]);
 
     const form = useForm<createClientFormData & { clientServerId?: string }>({
         resolver: zodResolver(createClientSchema),
         defaultValues: {
             name: '',
-            language: 'RUSSIAN',
+            language: '',
             telegramId: '',
             clientServerId: '',
             configs: [
                 {
-                    serverId: '',
+                    serverId: 'none',
                     clientName: '',
                     expiresAt: '',
                     protocol: undefined,
@@ -112,7 +129,7 @@ export default function CreateClientPage() {
 
     const addConfig = () => {
         const newConfig = {
-            serverId: watchClientServerId || '',
+            serverId: '',
             clientName: '',
             expiresAt: '',
             protocol: 'AMNEZIAWG' as const,
@@ -139,7 +156,7 @@ export default function CreateClientPage() {
     };
 
     const clearConfigServer = (index: number) => {
-        form.setValue(`configs.${index}.serverId`, watchClientServerId || '', {
+        form.setValue(`configs.${index}.serverId`, '', {
             shouldValidate: true,
         });
     };
@@ -179,44 +196,62 @@ export default function CreateClientPage() {
                                 )}
                             />
 
-                            {/* Новое поле: выбор сервера для клиента */}
-                            <FormField
-                                control={form.control}
-                                name="clientServerId"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>
-                                            Default Server{' '}
-                                            <span className="text-destructive">*</span>
-                                        </FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select default server" />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                {serversData?.map((server) => (
-                                                    <SelectItem
-                                                        key={server.id}
-                                                        value={String(server.id)}>
-                                                        {server.name}
-                                                    </SelectItem>
-                                                )) || (
-                                                    <SelectItem value="" disabled>
-                                                        No servers available
-                                                    </SelectItem>
-                                                )}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                        <div className="text-muted-foreground mt-1 text-xs">
-                                            This server will be used for all configs unless
-                                            overridden
-                                        </div>
-                                    </FormItem>
-                                )}
-                            />
+                            {isLoadingServers || !localServers ? (
+                                <div className="flex items-center justify-center py-4">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span className="ml-2 text-sm">Loading servers...</span>
+                                </div>
+                            ) : (
+                                <FormField
+                                    control={form.control}
+                                    name="clientServerId"
+                                    render={({ field }) => {
+                                        const currentValue = useMemo(() => {
+                                            if (!field.value) return [];
+                                            const server = localServers?.find(
+                                                (c) => String(c.id) === String(field.value)
+                                            );
+                                            return server
+                                                ? [
+                                                      {
+                                                          value: String(server.id),
+                                                          label: server.name,
+                                                      },
+                                                  ]
+                                                : [];
+                                        }, [field.value, localServers]);
+
+                                        return (
+                                            <FormItem>
+                                                <FormLabel>Default Server</FormLabel>
+                                                <MultipleSelector
+                                                    value={currentValue}
+                                                    onChange={(selectedOptions) => {
+                                                        if (selectedOptions.length === 0) {
+                                                            field.onChange('');
+                                                        } else {
+                                                            field.onChange(
+                                                                selectedOptions[0]?.value || ''
+                                                            );
+                                                        }
+                                                    }}
+                                                    options={serverOptions}
+                                                    placeholder="Search server..."
+                                                    emptyIndicator={
+                                                        <p className="text-center text-sm">
+                                                            No results found
+                                                        </p>
+                                                    }
+                                                    className="w-full"
+                                                    maxSelected={1}
+                                                    hidePlaceholderWhenSelected
+                                                />
+                                                <FormMessage />
+                                            </FormItem>
+                                        );
+                                    }}
+                                />
+                            )}
 
                             <FormField
                                 control={form.control}
@@ -365,7 +400,7 @@ export default function CreateClientPage() {
                                                     !configServerId ? (
                                                         <div className="text-sm">
                                                             <span className="text-muted-foreground">
-                                                                Using client's server:{' '}
+                                                                Using client server:{' '}
                                                             </span>
                                                             <span className="font-medium">
                                                                 {clientServer?.name ||
@@ -384,66 +419,131 @@ export default function CreateClientPage() {
                                                     )}
                                                 </div>
 
-                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`configs.${index}.clientName`}
-                                                        render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>
-                                                                    ClientName Suffix{' '}
-                                                                    <span className="text-destructive">
-                                                                        *
-                                                                    </span>
-                                                                </FormLabel>
-                                                                <FormControl>
-                                                                    <Input
-                                                                        placeholder="Enter clientName suffix"
-                                                                        {...field}
-                                                                    />
-                                                                </FormControl>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}
-                                                    />
+                                                <div className="space-y-2">
+                                                    <FormLabel>Server (Optional)</FormLabel>
 
-                                                    <div className="space-y-2">
-                                                        <FormLabel>Server (Optional)</FormLabel>
-                                                        <Select
-                                                            value={configServerId || ''}
-                                                            onValueChange={(value) =>
-                                                                handleConfigServerChange(
-                                                                    index,
-                                                                    value
-                                                                )
-                                                            }>
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select custom server" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem
-                                                                    value={
-                                                                        watchClientServerId || ''
-                                                                    }>
-                                                                    Use client's server:{' '}
-                                                                    {clientServer?.name ||
-                                                                        'Not selected'}
-                                                                </SelectItem>
-                                                                {serversData?.map((server) => (
-                                                                    <SelectItem
-                                                                        key={server.id}
-                                                                        value={String(server.id)}>
-                                                                        {server.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <div className="text-muted-foreground text-xs">
-                                                            Leave as "Use client's server" to
-                                                            inherit from above
+                                                    {isLoadingServers || !localServers ? (
+                                                        <div className="flex items-center justify-center py-4">
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                            <span className="ml-2 text-sm">
+                                                                Loading servers...
+                                                            </span>
                                                         </div>
-                                                    </div>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            <MultipleSelector
+                                                                value={(() => {
+                                                                    if (
+                                                                        !configServerId ||
+                                                                        configServerId ===
+                                                                            watchClientServerId
+                                                                    ) {
+                                                                        return [
+                                                                            {
+                                                                                value: 'client-server',
+                                                                                label: `Use client server: ${clientServer?.name || 'Not selected'}`,
+                                                                            },
+                                                                        ];
+                                                                    }
+
+                                                                    const server =
+                                                                        serversData?.find(
+                                                                            (s) =>
+                                                                                String(s.id) ===
+                                                                                configServerId
+                                                                        );
+                                                                    return server
+                                                                        ? [
+                                                                              {
+                                                                                  value: String(
+                                                                                      server.id
+                                                                                  ),
+                                                                                  label: server.name,
+                                                                              },
+                                                                          ]
+                                                                        : [];
+                                                                })()}
+                                                                onChange={(selectedOptions) => {
+                                                                    if (
+                                                                        selectedOptions.length === 0
+                                                                    ) {
+                                                                        handleConfigServerChange(
+                                                                            index,
+                                                                            ''
+                                                                        );
+                                                                    } else {
+                                                                        const selectedValue =
+                                                                            selectedOptions[0]
+                                                                                ?.value;
+                                                                        if (
+                                                                            selectedValue ===
+                                                                            'client-server'
+                                                                        ) {
+                                                                            handleConfigServerChange(
+                                                                                index,
+                                                                                ''
+                                                                            );
+                                                                        } else {
+                                                                            if (selectedValue)
+                                                                                handleConfigServerChange(
+                                                                                    index,
+                                                                                    selectedValue
+                                                                                );
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                options={(() => {
+                                                                    const baseOptions =
+                                                                        serverOptions;
+                                                                    const clientServerOption = {
+                                                                        value: 'client-server',
+                                                                        label: `Use client server: ${clientServer?.name || 'Not selected'}`,
+                                                                    };
+                                                                    return [
+                                                                        clientServerOption,
+                                                                        ...baseOptions,
+                                                                    ];
+                                                                })()}
+                                                                placeholder="Select server..."
+                                                                emptyIndicator={
+                                                                    <p className="text-center text-sm">
+                                                                        No servers available
+                                                                    </p>
+                                                                }
+                                                                className="w-full"
+                                                                maxSelected={1}
+                                                                hidePlaceholderWhenSelected
+                                                            />
+
+                                                            <div className="text-muted-foreground text-xs">
+                                                                Select "Use client server" to
+                                                                inherit from client's default server
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
+
+                                                <FormField
+                                                    control={form.control}
+                                                    name={`configs.${index}.clientName`}
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>
+                                                                ClientName Suffix{' '}
+                                                                <span className="text-destructive">
+                                                                    *
+                                                                </span>
+                                                            </FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    placeholder="Enter clientName suffix"
+                                                                    {...field}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
 
                                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                                     <FormField

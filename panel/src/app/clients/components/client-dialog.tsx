@@ -27,14 +27,24 @@ import { toast } from 'sonner';
 import { api } from '@/trpc/react';
 import { updateClientSchema, type updateClientFormData } from '@/lib/schemas/clients';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import type { Languages } from 'prisma/generated/enums';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { LanguagesMapping } from '@/lib/data/mappings';
 
 interface Props {
     id?: number;
     name?: string;
+    language?: Languages;
     telegramId?: string | null;
 }
 
-export function UpdateClientDialog({ id, name, telegramId }: Props) {
+export function UpdateClientDialog({ id, name, language, telegramId }: Props) {
     const [open, setOpen] = useState(false);
     const utils = api.useUtils();
 
@@ -43,6 +53,7 @@ export function UpdateClientDialog({ id, name, telegramId }: Props) {
         defaultValues: {
             id,
             name,
+            language,
             telegramId: telegramId || undefined,
         },
     });
@@ -71,6 +82,7 @@ export function UpdateClientDialog({ id, name, telegramId }: Props) {
         form.reset({
             id,
             name,
+            language,
             telegramId: telegramId || undefined,
         });
     }, [id, name, telegramId]);
@@ -108,6 +120,35 @@ export function UpdateClientDialog({ id, name, telegramId }: Props) {
                                     <FormControl>
                                         <Input placeholder="Enter a name" {...field} />
                                     </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="language"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>
+                                        Language <span className="text-destructive">*</span>
+                                    </FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select language" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {Object.entries(LanguagesMapping).map(
+                                                ([value, label]) => (
+                                                    <SelectItem key={value} value={value}>
+                                                        {label}
+                                                    </SelectItem>
+                                                )
+                                            )}
+                                        </SelectContent>
+                                    </Select>
                                     <FormMessage />
                                 </FormItem>
                             )}

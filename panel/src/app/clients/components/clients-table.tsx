@@ -28,7 +28,7 @@ import {
     getProtocolColor,
     telegramToastError,
 } from '@/lib/utils';
-import type { Protocols } from 'prisma/generated/enums';
+import type { Languages, Protocols } from 'prisma/generated/enums';
 import { UpdateClientDialog } from './client-dialog';
 import DeleteClientDialog from './delete-client-dialog';
 import { protocolsMapping } from '@/lib/data/mappings';
@@ -42,6 +42,7 @@ interface ConfigsWithClientsProps {
     clients: Array<{
         id: number;
         name: string;
+        language: Languages;
         telegramId: string | null;
         createdAt: Date;
         configsCount: number;
@@ -138,6 +139,7 @@ function ClientRow({
     client: {
         id: number;
         name: string;
+        language: Languages;
         telegramId: string | null;
         createdAt: Date;
         configsCount: number;
@@ -330,6 +332,7 @@ function ClientRow({
                         <UpdateClientDialog
                             id={client.id}
                             name={client.name}
+                            language={client.language}
                             telegramId={client.telegramId}
                         />
                         <DeleteClientDialog id={client.id} />

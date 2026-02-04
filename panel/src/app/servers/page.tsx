@@ -17,8 +17,10 @@ import {
 import { CustomPagination } from '@/components/custom-pagination';
 import DeleteServerDialog from './components/delete-server-dialog';
 import { UpsertServerDialog } from './components/upsert-server-dialog';
+import { toast } from 'sonner';
+import { Check, Copy } from 'lucide-react';
 
-export default function ServersPAge() {
+export default function ServersPage() {
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState('25');
@@ -83,24 +85,14 @@ export default function ServersPAge() {
                                                 <TableHead>ID</TableHead>
                                                 <TableHead>Name</TableHead>
                                                 <TableHead>Host</TableHead>
+                                                <TableHead>API Key</TableHead>
+                                                <TableHead>Configs count</TableHead>
                                                 <TableHead className="w-25">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {data?.servers.map((server) => (
-                                                <TableRow key={server.id}>
-                                                    <TableCell className="font-medium">
-                                                        {server.id}
-                                                    </TableCell>
-                                                    <TableCell>{server.name}</TableCell>
-                                                    <TableCell>{`${server.ip}${server.port !== 80 ? `:${server.port}` : ''}`}</TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center justify-end gap-1">
-                                                            <UpsertServerDialog server={server} />
-                                                            <DeleteServerDialog id={server.id} />
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
+                                                <ServerRow key={server.id} server={server} />
                                             ))}
                                         </TableBody>
                                     </Table>
@@ -122,5 +114,60 @@ export default function ServersPAge() {
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+function ServerRow({
+    server,
+}: Readonly<{
+    server: {
+        id: number;
+        name: string;
+        ip: string;
+        port: number;
+        apiKey: string | null;
+        configsCount: number;
+    };
+}>) {
+    const [copiedApiKey, setCopiedApiKey] = useState(false);
+
+    const copyApiKeyToClipboard = async (apiKey: string | null) => {
+        if (!apiKey) return;
+
+        try {
+            await navigator.clipboard.writeText(apiKey);
+            setCopiedApiKey(true);
+            toast.success('API key copied to clipboard');
+            setTimeout(() => setCopiedApiKey(false), 2000);
+        } catch (err) {
+            toast.error('Failed to copy API key');
+        }
+    };
+
+    return (
+        <TableRow key={server.id}>
+            <TableCell className="font-medium">{server.id}</TableCell>
+            <TableCell>{server.name}</TableCell>
+            <TableCell>
+                <a className="text-sky-500 hover:underline" target='_blank' href={`http://${server.ip}:${server.port}/docs`}>
+                    {`${server.ip}${server.port !== 80 ? `:${server.port}` : ''}`}
+                </a>
+            </TableCell>
+            <TableCell>
+                <div
+                    className="flex cursor-pointer items-center gap-1"
+                    onClick={() => copyApiKeyToClipboard(server.apiKey)}>
+                    <span>********************</span>
+                    {copiedApiKey ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </div>
+            </TableCell>
+            <TableCell>{server.configsCount}</TableCell>
+            <TableCell>
+                <div className="flex items-center justify-end gap-1">
+                    <UpsertServerDialog server={server} />
+                    <DeleteServerDialog id={server.id} />
+                </div>
+            </TableCell>
+        </TableRow>
     );
 }

@@ -4,7 +4,7 @@ import { Languages } from 'prisma/generated/enums';
 
 export const createClientSchema = z.object({
     name: z.string().min(1).max(30),
-    language: z.enum(Languages),
+    language: z.string().min(1),
     telegramId: z.string().optional(),
     configs: z.array(createConfigSchema),
 });
@@ -14,6 +14,7 @@ export type createClientFormData = z.infer<typeof createClientSchema>;
 export const updateClientSchema = z.object({
     id: z.number().min(1),
     name: z.string().min(1).max(30),
+    language: z.enum(Languages),
     telegramId: z.string().optional(),
 });
 

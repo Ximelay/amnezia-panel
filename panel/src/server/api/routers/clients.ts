@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { createTRPCRouter, publicProcedure } from '@/server/api/trpc';
 import type { ProtocolsFilter } from '@/server/enums';
-import type { Prisma } from 'prisma/generated/client';
+import type { Languages, Prisma } from 'prisma/generated/client';
 import { createClientSchema, updateClientSchema } from '@/lib/schemas/clients';
 import { amneziaApiService } from '@/server/services/amnezia-api';
 import { apiProtocolsMapping, protocolsApiMapping } from '@/lib/data/mappings';
@@ -39,7 +39,7 @@ export const clientsRouter = createTRPCRouter({
     getClientsWithConfigs: publicProcedure
         .input(
             z.object({
-                serverId: z.string(),
+                serverId: z.string().optional(),
                 search: z.string().optional(),
                 protocolFilter: z.string() as z.ZodType<ProtocolsFilter>,
             })
@@ -47,6 +47,7 @@ export const clientsRouter = createTRPCRouter({
         .query(async ({ ctx, input }) => {
             const { search, protocolFilter } = input;
             const serverId = Number(input.serverId);
+            if (!serverId) return;
 
             const apiConfigs = await amneziaApiService.getConfigs(serverId);
 
@@ -96,12 +97,6 @@ export const clientsRouter = createTRPCRouter({
                                 serverId,
                             },
                         },
-                    },
-                    select: {
-                        id: true,
-                        createdAt: true,
-                        name: true,
-                        telegramId: true,
                     },
                     orderBy: {
                         name: 'asc',
@@ -193,6 +188,7 @@ export const clientsRouter = createTRPCRouter({
                     id: client.id,
                     createdAt: client.createdAt,
                     name: client.name,
+                    language: client.language,
                     telegramId: client.telegramId,
                     configs: clientConfigs,
                     configsCount: clientConfigs.length,
@@ -212,7 +208,7 @@ export const clientsRouter = createTRPCRouter({
         const { name, language, telegramId, configs } = input;
 
         const createdClient = await ctx.db.clients.create({
-            data: { name, language, telegramId },
+            data: { name, language: language as Languages, telegramId },
         });
 
         for (const config of configs) {

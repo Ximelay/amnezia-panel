@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { logsService } from './logs';
 import type {
     CreateClientResponse,
-    GetServerResponse,
+    GetServerInfoResponse,
     GetClientsResponse,
     MessageResponse,
     Protocol,
@@ -48,7 +48,7 @@ class AmneziaApiService {
 
         const targetServer = server || (await this.getApiServer(serverId));
         const apiKey = await serversCacheService.getDecryptedApiKey(targetServer.apiKey);
-        headers['apiKey'] = apiKey || '';
+        headers['x-api-key'] = apiKey || '';
 
         return {
             method,
@@ -297,9 +297,9 @@ class AmneziaApiService {
         }
     }
 
-    async getServer(serverId: number): Promise<GetServerResponse> {
+    async getServerInfo(serverId: number): Promise<GetServerInfoResponse> {
         try {
-            return await this.makeRequestWithRetry<GetServerResponse>(serverId, 'server', 'GET');
+            return await this.makeRequestWithRetry<GetServerInfoResponse>(serverId, 'server', 'GET');
         } catch (error) {
             await logsService.createLog(
                 'SERVER',

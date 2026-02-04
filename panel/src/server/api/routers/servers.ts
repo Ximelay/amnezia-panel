@@ -10,6 +10,7 @@ import { TRPCError } from '@trpc/server';
 import { upsertServerSchema } from '@/lib/schemas/servers';
 import { encryptionService } from '@/server/services/encryption';
 import type { Prisma } from 'prisma/generated/client';
+import { serversCacheService } from '@/server/services/cache/servers-cache';
 
 export const serversRouter = createTRPCRouter({
     getServers: publicProcedure.query(async ({ ctx }) => {
@@ -26,13 +27,15 @@ export const serversRouter = createTRPCRouter({
         .query(async ({ input }) => {
             const { serverId } = input;
 
-            return await amneziaApiService.getServer(serverId);
+            return await amneziaApiService.getServerInfo(serverId);
         }),
 
     getServerLoad: publicProcedure
         .input(z.object({ serverId: z.number() }))
         .query(async ({ input }) => {
             const { serverId } = input;
+
+            return await amneziaApiService.getServerLoad(serverId);
         }),
 
     getLogs: publicProcedure
@@ -120,35 +123,26 @@ export const serversRouter = createTRPCRouter({
             await amneziaApiService.rebootServer(serverId);
         }),
 
-    upsertServer: publicProcedure.input(upsertServerSchema).mutation(async ({ ctx, input }) => {
-        const { id, name, ip, port, apiKey } = input;
+    upsertServer: publicProcedure.input(upsertServerSchema).mutation(async ({ input }) => {
+        const { id, name } = input;
 
-        const encryptedApiKey = encryptionService.encrypt(apiKey);
-
-        await ctx.db.servers.upsert({
-            where: { id: id || -1 },
-            create: { name, ip, port, apiKey: encryptedApiKey },
-            update: { name, ip, port, apiKey: encryptedApiKey },
-        });
+        await serversCacheService.upsertServer(input, id);
 
         await logsService.createLog('SERVER', 'INFO', `Server ${name} was saved`);
     }),
 
     deleteServer: publicProcedure
         .input(z.object({ id: z.number() }))
-        .mutation(async ({ ctx, input }) => {
+        .mutation(async ({ input }) => {
             const { id } = input;
 
-            await ctx.db.configs.deleteMany({
-                where: { serverId: id },
-            });
+            const deletedServerName = await serversCacheService.deleteServer(id);
 
-            const deletedServer = await ctx.db.servers.delete({
-                where: { id },
-                select: { name: true },
-            });
-
-            await logsService.createLog('SERVER', 'WARNING', `Server ${deletedServer.name} was deleted with configs`);
+            await logsService.createLog(
+                'SERVER',
+                'WARNING',
+                `Server ${deletedServerName} was deleted with configs`
+            );
         }),
 
     getServersTable: publicProcedure
@@ -182,9 +176,10 @@ export const serversRouter = createTRPCRouter({
                         ip: true,
                         port: true,
                         apiKey: true,
+                        _count: { select: { Configs: true } },
                     },
                     orderBy: {
-                        createdAt: 'desc',
+                        id: 'asc',
                     },
                     take: numberLimit,
                     skip: offset,
@@ -201,6 +196,7 @@ export const serversRouter = createTRPCRouter({
                 ip: server.ip,
                 port: server.port,
                 apiKey: encryptionService.decryptField(server.apiKey),
+                configsCount: server._count.Configs,
             }));
 
             return {

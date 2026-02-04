@@ -7,42 +7,45 @@ import { InputSearchLoader } from '@/components/input-search';
 import { Loader } from '@/components/loader';
 import debounce from 'lodash.debounce';
 import { Button } from '@/components/ui/button';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2, Plus, Server } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { CreateConfigDialog } from '@/app/clients/components/create-config-dialog';
 import { protocolsMapping } from '@/lib/data/mappings';
 import { toast } from 'sonner';
 import { telegramToastError } from '@/lib/utils';
 import { ConfigsWithClientsTable } from './components/clients-table';
-import MultipleSelector from '@/components/ui/multi-select';
-
-type ServerOption = {
-    value: string;
-    label: string;
-};
+import MultipleSelector, { type Option } from '@/components/ui/multi-select';
 
 export default function ClientsPage() {
     const [search, setSearch] = useState('');
     const [protocolFilter, setProtocolFilter] = useState('All');
-    const [serverFilter, setServerFilter] = useState<ServerOption[]>([]);
+    const [serverFilter, setServerFilter] = useState<Option[]>([]);
     const router = useRouter();
 
-    const { data: serversData } = api.servers.getServers.useQuery();
+    const { data: serversData, isLoading: isLoadingServers } = api.servers.getServers.useQuery();
 
     const serverOptions = useMemo(() => {
-        return (
-            serversData?.map((server) => ({
-                value: String(server.id),
-                label: server.name,
-            })) || []
-        );
+        if (!serversData) return [];
+        return serversData.map((server) => ({
+            value: String(server.id),
+            label: server.name,
+        }));
     }, [serversData]);
 
-    const { data, isLoading, isFetching, error } = api.clients.getClientsWithConfigs.useQuery({
-        serverId: serverFilter[0]?.value || '1',
-        search,
-        protocolFilter,
-    });
+    const selectedServerId = useMemo(() => {
+        return serverFilter[0]?.value;
+    }, [serverFilter]);
+
+    const { data, isLoading, isFetching, error } = api.clients.getClientsWithConfigs.useQuery(
+        {
+            serverId: selectedServerId,
+            search,
+            protocolFilter,
+        },
+        {
+            enabled: !!selectedServerId,
+        }
+    );
 
     const changeHandler = (event: React.ChangeEvent<HTMLInputElement>) => {
         setSearch(event.target.value);
@@ -69,10 +72,17 @@ export default function ClientsPage() {
         sendMessages.mutate();
     };
 
-    const handleServerChange = (selected: ServerOption[]) => {
+    const handleServerChange = (selected: Option[]) => {
         setServerFilter(selected);
     };
 
+    if (isLoadingServers) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Loader />
+            </div>
+        );
+    }
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -93,69 +103,92 @@ export default function ClientsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Clients table</CardTitle>
-                    <CardDescription>Clients count: {data?.totalClients}</CardDescription>
+                    <CardDescription>Clients count: {data?.totalClients || 0}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="mb-6 flex items-center justify-between gap-4">
+                    <div className="mb-6 space-y-4">
                         <div className="flex items-center gap-4">
-                            <div className="bg-muted flex items-center gap-1 rounded-lg p-1">
-                                <Button
-                                    variant={protocolFilter === 'All' ? 'default' : 'ghost'}
-                                    size="sm"
-                                    onClick={() => setProtocolFilter('All')}
-                                    className="h-8">
-                                    All
-                                </Button>
-                                <Button
-                                    variant={protocolFilter === 'XRAY' ? 'default' : 'ghost'}
-                                    size="sm"
-                                    onClick={() => setProtocolFilter('XRAY')}
-                                    className="h-8">
-                                    {protocolsMapping['XRAY']}
-                                </Button>
-                                <Button
-                                    variant={protocolFilter === 'AMNEZIAWG' ? 'default' : 'ghost'}
-                                    size="sm"
-                                    onClick={() => setProtocolFilter('AMNEZIAWG')}
-                                    className="h-8">
-                                    {protocolsMapping['AMNEZIAWG']}
-                                </Button>
+                            <div className="flex items-center gap-2">
+                                <Server className="text-muted-foreground h-4 w-4" />
+                                <span className="text-sm font-medium">Server:</span>
                             </div>
-
-                            <div className="w-50">
-                                <MultipleSelector
-                                    value={serverFilter}
-                                    onChange={handleServerChange}
-                                    defaultOptions={serverOptions}
-                                    placeholder="Select a server"
-                                    maxSelected={1}
-                                    hidePlaceholderWhenSelected={true}
-                                />
-                            </div>
-
-                            <InputSearchLoader
-                                placeholder="Search by config name..."
-                                onChange={debouncedChangeHandler}
-                                isLoading={isLoading || isFetching}
+                            <MultipleSelector
+                                className="w-64"
+                                value={serverFilter}
+                                onChange={handleServerChange}
+                                defaultOptions={serverOptions}
+                                options={serverOptions}
+                                placeholder="Select a server..."
+                                maxSelected={1}
+                                hidePlaceholderWhenSelected={true}
                             />
                         </div>
 
-                        {process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true' && (
-                            <Button
-                                disabled={sendMessages.isPending}
-                                onClick={onSubmit}
-                                className="bg-blue-600 hover:bg-blue-500">
-                                {sendMessages.isPending && (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {selectedServerId && (
+                            <div className="flex items-center justify-between gap-4 border-t pt-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-muted flex items-center gap-1 rounded-lg p-1">
+                                        <Button
+                                            variant={protocolFilter === 'All' ? 'default' : 'ghost'}
+                                            size="sm"
+                                            onClick={() => setProtocolFilter('All')}
+                                            className="h-8">
+                                            All
+                                        </Button>
+                                        <Button
+                                            variant={
+                                                protocolFilter === 'XRAY' ? 'default' : 'ghost'
+                                            }
+                                            size="sm"
+                                            onClick={() => setProtocolFilter('XRAY')}
+                                            className="h-8">
+                                            {protocolsMapping['XRAY']}
+                                        </Button>
+                                        <Button
+                                            variant={
+                                                protocolFilter === 'AMNEZIAWG' ? 'default' : 'ghost'
+                                            }
+                                            size="sm"
+                                            onClick={() => setProtocolFilter('AMNEZIAWG')}
+                                            className="h-8">
+                                            {protocolsMapping['AMNEZIAWG']}
+                                        </Button>
+                                    </div>
+
+                                    <InputSearchLoader
+                                        placeholder="Search by config name..."
+                                        onChange={debouncedChangeHandler}
+                                        isLoading={isLoading || isFetching}
+                                    />
+                                </div>
+
+                                {process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true' && (
+                                    <Button
+                                        disabled={sendMessages.isPending}
+                                        onClick={onSubmit}
+                                        className="bg-blue-600 hover:bg-blue-500">
+                                        {sendMessages.isPending && (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        )}
+                                        {sendMessages.isPending
+                                            ? 'Sending...'
+                                            : 'Send VPN configs to clients'}
+                                    </Button>
                                 )}
-                                {sendMessages.isPending
-                                    ? 'Sending...'
-                                    : 'Send VPN configs to clients'}
-                            </Button>
+                            </div>
                         )}
                     </div>
 
-                    {isLoading ? (
+                    {!selectedServerId ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-center">
+                            <Server className="text-muted-foreground mb-4 h-16 w-16" />
+                            <h3 className="text-lg font-semibold">Select a Server</h3>
+                            <p className="text-muted-foreground mt-2 max-w-md text-sm">
+                                Choose a server from the dropdown above to view and manage its
+                                clients and VPN configurations
+                            </p>
+                        </div>
+                    ) : isLoading ? (
                         <Loader />
                     ) : error ? (
                         <div className="flex items-center justify-center py-8">

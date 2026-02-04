@@ -40,7 +40,7 @@ export interface MessageResponse {
     message: string;
 }
 
-export interface GetServerResponse {
+export interface GetServerInfoResponse {
     id: string;
     region: string;
     weight: number;
