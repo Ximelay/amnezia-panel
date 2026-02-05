@@ -21,6 +21,54 @@ import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function NotificationPage() {
+    const isTelegramEnabled = process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true';
+
+    if (!isTelegramEnabled) {
+        return (
+            <div className="container mx-auto max-w-4xl py-8">
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold tracking-tight">Send Notification</h1>
+                    <p className="text-muted-foreground mt-2">
+                        Send a message to a client or group of clients via Telegram
+                    </p>
+                </div>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Telegram Bot Not Configured</CardTitle>
+                        <CardDescription>
+                            This page is only available when Telegram bot integration is enabled
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            <p className="text-muted-foreground">
+                                To use the notification feature, please ensure that:
+                            </p>
+                            <ul className="text-muted-foreground list-disc space-y-2 pl-5">
+                                <li>
+                                    The Telegram bot token is properly configured in your
+                                    environment variables
+                                </li>
+                                <li>
+                                    The NEXT_PUBLIC_USES_TELEGRAM_BOT environment variable is set to
+                                    "true"
+                                </li>
+                                <li>Your Telegram bot is properly set up and running</li>
+                            </ul>
+                            <div className="border-t pt-4">
+                                <p className="text-muted-foreground text-sm">
+                                    Once configured, you can send notifications directly to clients
+                                    through Telegram.
+                                </p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
     const form = useForm<sendNotificationFormData>({
         resolver: zodResolver(sendNotificationSchema),
         defaultValues: {
@@ -92,7 +140,7 @@ export default function NotificationPage() {
             <div className="mb-8">
                 <h1 className="text-3xl font-bold tracking-tight">Send Notification</h1>
                 <p className="text-muted-foreground mt-2">
-                    Send a message to a client or group of clients via Telegram
+                    Send a message to a client or group of clients
                 </p>
             </div>
 
