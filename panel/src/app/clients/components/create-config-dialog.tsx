@@ -56,7 +56,10 @@ export function CreateConfigDialog() {
         },
     });
 
-    const { data: servers, isLoading: isLoadingServers } = api.servers.getServers.useQuery();
+    const { data: servers, isLoading: isLoadingServers } = api.servers.getServers.useQuery(
+        undefined,
+        { enabled: open }
+    );
 
     const [localServers, setLocalServers] = useState<typeof servers>([]);
 
@@ -68,9 +71,12 @@ export function CreateConfigDialog() {
 
     const watchServerId = form.watch('serverId');
 
-    const { data: clients, isLoading: isLoadingClients } = api.clients.getClients.useQuery({
-        serverId: watchServerId,
-    });
+    const { data: clients, isLoading: isLoadingClients } = api.clients.getClients.useQuery(
+        {
+            serverId: watchServerId,
+        },
+        { enabled: open }
+    );
 
     const watchClientId = form.watch('clientId');
 
@@ -81,6 +87,14 @@ export function CreateConfigDialog() {
             setLocalClients(clients);
         }
     }, [clients]);
+
+    const clientOptions = useMemo(() => {
+        if (!localClients) return [];
+        return localClients.map((client) => ({
+            value: String(client.id),
+            label: client.name,
+        }));
+    }, [localClients]);
 
     useEffect(() => {
         if (watchClientId && watchClientId !== '') {
@@ -190,7 +204,9 @@ export function CreateConfigDialog() {
 
                                     return (
                                         <FormItem>
-                                            <FormLabel>Server <span className="text-destructive">*</span></FormLabel>
+                                            <FormLabel>
+                                                Server <span className="text-destructive">*</span>
+                                            </FormLabel>
                                             <MultipleSelector
                                                 value={currentValue}
                                                 onChange={(selectedOptions) => {
@@ -230,14 +246,6 @@ export function CreateConfigDialog() {
                                 control={form.control}
                                 name="clientId"
                                 render={({ field }) => {
-                                    const clientOptions = useMemo(() => {
-                                        if (!localClients) return [];
-                                        return localClients.map((client) => ({
-                                            value: String(client.id),
-                                            label: client.name,
-                                        }));
-                                    }, [localClients]);
-
                                     const currentValue = useMemo(() => {
                                         if (!field.value) return [];
                                         const client = localClients?.find(

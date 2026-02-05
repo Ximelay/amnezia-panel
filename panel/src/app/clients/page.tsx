@@ -107,74 +107,71 @@ export default function ClientsPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="mb-6 space-y-4">
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                                <Server className="text-muted-foreground h-4 w-4" />
-                                <span className="text-sm font-medium">Server:</span>
+                        <div className="flex items-center justify-between gap-4 border-b pb-4">
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <Server className="text-muted-foreground h-4 w-4" />
+                                    <span className="text-sm font-medium">Server:</span>
+                                </div>
+                                <MultipleSelector
+                                    className="w-64"
+                                    value={serverFilter}
+                                    onChange={handleServerChange}
+                                    defaultOptions={serverOptions}
+                                    options={serverOptions}
+                                    placeholder="Select a server..."
+                                    maxSelected={1}
+                                    hidePlaceholderWhenSelected={true}
+                                />
                             </div>
-                            <MultipleSelector
-                                className="w-64"
-                                value={serverFilter}
-                                onChange={handleServerChange}
-                                defaultOptions={serverOptions}
-                                options={serverOptions}
-                                placeholder="Select a server..."
-                                maxSelected={1}
-                                hidePlaceholderWhenSelected={true}
-                            />
+                            {process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true' && (
+                                <Button
+                                    disabled={sendMessages.isPending}
+                                    onClick={onSubmit}
+                                    className="bg-blue-600 hover:bg-blue-500">
+                                    {sendMessages.isPending && (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    )}
+                                    {sendMessages.isPending
+                                        ? 'Sending...'
+                                        : 'Send VPN configs to clients'}
+                                </Button>
+                            )}
                         </div>
 
                         {selectedServerId && (
-                            <div className="flex items-center justify-between gap-4 border-t pt-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="bg-muted flex items-center gap-1 rounded-lg p-1">
-                                        <Button
-                                            variant={protocolFilter === 'All' ? 'default' : 'ghost'}
-                                            size="sm"
-                                            onClick={() => setProtocolFilter('All')}
-                                            className="h-8">
-                                            All
-                                        </Button>
-                                        <Button
-                                            variant={
-                                                protocolFilter === 'XRAY' ? 'default' : 'ghost'
-                                            }
-                                            size="sm"
-                                            onClick={() => setProtocolFilter('XRAY')}
-                                            className="h-8">
-                                            {protocolsMapping['XRAY']}
-                                        </Button>
-                                        <Button
-                                            variant={
-                                                protocolFilter === 'AMNEZIAWG' ? 'default' : 'ghost'
-                                            }
-                                            size="sm"
-                                            onClick={() => setProtocolFilter('AMNEZIAWG')}
-                                            className="h-8">
-                                            {protocolsMapping['AMNEZIAWG']}
-                                        </Button>
-                                    </div>
-
-                                    <InputSearchLoader
-                                        placeholder="Search by config name..."
-                                        onChange={debouncedChangeHandler}
-                                        isLoading={isLoading || isFetching}
-                                    />
+                            <div className="flex items-center gap-4">
+                                <div className="bg-muted flex items-center gap-1 rounded-lg p-1">
+                                    <Button
+                                        variant={protocolFilter === 'All' ? 'default' : 'ghost'}
+                                        size="sm"
+                                        onClick={() => setProtocolFilter('All')}
+                                        className="h-8">
+                                        All
+                                    </Button>
+                                    <Button
+                                        variant={protocolFilter === 'XRAY' ? 'default' : 'ghost'}
+                                        size="sm"
+                                        onClick={() => setProtocolFilter('XRAY')}
+                                        className="h-8">
+                                        {protocolsMapping['XRAY']}
+                                    </Button>
+                                    <Button
+                                        variant={
+                                            protocolFilter === 'AMNEZIAWG' ? 'default' : 'ghost'
+                                        }
+                                        size="sm"
+                                        onClick={() => setProtocolFilter('AMNEZIAWG')}
+                                        className="h-8">
+                                        {protocolsMapping['AMNEZIAWG']}
+                                    </Button>
                                 </div>
 
-                                {process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true' && (
-                                    <Button
-                                        disabled={sendMessages.isPending}
-                                        onClick={onSubmit}
-                                        className="bg-blue-600 hover:bg-blue-500">
-                                        {sendMessages.isPending && (
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        )}
-                                        {sendMessages.isPending
-                                            ? 'Sending...'
-                                            : 'Send VPN configs to clients'}
-                                    </Button>
-                                )}
+                                <InputSearchLoader
+                                    placeholder="Search by config name..."
+                                    onChange={debouncedChangeHandler}
+                                    isLoading={isLoading || isFetching}
+                                />
                             </div>
                         )}
                     </div>

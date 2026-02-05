@@ -3,7 +3,11 @@ import { z } from 'zod';
 import { createTRPCRouter, publicProcedure } from '@/server/api/trpc';
 import type { ProtocolsFilter } from '@/server/enums';
 import type { Languages, Prisma } from 'prisma/generated/client';
-import { createClientSchema, updateClientSchema } from '@/lib/schemas/clients';
+import {
+    createClientSchema,
+    sendNotificationSchema,
+    updateClientSchema,
+} from '@/lib/schemas/clients';
 import { amneziaApiService } from '@/server/services/amnezia-api';
 import { apiProtocolsMapping, protocolsApiMapping } from '@/lib/data/mappings';
 import { encryptionService } from '@/server/services/encryption';
@@ -422,5 +426,78 @@ export const clientsRouter = createTRPCRouter({
                 'INFO',
                 `Links sent for client ${foundClient.name}`
             );
+        }),
+
+    sendNotification: publicProcedure
+        .input(sendNotificationSchema)
+        .mutation(async ({ ctx, input }) => {
+            const { clientId, message } = input;
+
+            if (clientId === 'All Russian' || clientId === 'All English') {
+                const language = clientId === 'All Russian' ? 'RUSSIAN' : 'ENGLISH';
+
+                const clients = await ctx.db.clients.findMany({
+                    where: { language },
+                    select: { telegramId: true, name: true },
+                });
+
+                const validClients = clients.filter((client) => client.telegramId);
+
+                const BATCH_SIZE = 10;
+
+                for (let i = 0; i < validClients.length; i += BATCH_SIZE) {
+                    const batch = validClients.slice(i, i + BATCH_SIZE);
+
+                    await Promise.allSettled(
+                        batch.map((client) =>
+                            telegramService.sendMessage(
+                                {
+                                    chatId: client.telegramId!,
+                                    text: message,
+                                    parseMode: 'HTML',
+                                },
+                                client.name
+                            )
+                        )
+                    );
+
+                    if (i + BATCH_SIZE < validClients.length) {
+                        await new Promise((resolve) => setTimeout(resolve, 100));
+                    }
+                }
+
+                await logsService.createLog(
+                    'TELEGRAM',
+                    'INFO',
+                    `Mass notification sent to ${validClients.length} ${language.toLowerCase()} clients`
+                );
+            } else {
+                const foundClient = await ctx.db.clients.findUnique({
+                    where: { id: Number(clientId) },
+                    select: { telegramId: true, name: true },
+                });
+
+                if (!foundClient?.telegramId) {
+                    throw new TRPCError({
+                        code: 'NOT_FOUND',
+                        message: 'Client not found or has no Telegram ID',
+                    });
+                }
+
+                await telegramService.sendMessage(
+                    {
+                        chatId: foundClient.telegramId,
+                        text: message,
+                        parseMode: 'HTML',
+                    },
+                    foundClient.name
+                );
+
+                await logsService.createLog(
+                    'TELEGRAM',
+                    'INFO',
+                    `Notification sent to client ${foundClient.name}`
+                );
+            }
         }),
 });

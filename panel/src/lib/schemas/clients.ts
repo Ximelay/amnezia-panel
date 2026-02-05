@@ -19,3 +19,10 @@ export const updateClientSchema = z.object({
 });
 
 export type updateClientFormData = z.infer<typeof updateClientSchema>;
+
+export const sendNotificationSchema = z.object({
+    clientId: z.string().min(1),
+    message: z.string().min(1),
+});
+
+export type sendNotificationFormData = z.infer<typeof sendNotificationSchema>;
