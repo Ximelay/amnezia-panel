@@ -3,7 +3,7 @@ import { telegramService } from './telegram';
 import { encryptionService } from '../encryption';
 import { format } from 'date-fns';
 import { protocolsMapping } from '@/lib/data/mappings';
-import type { Protocols } from 'prisma/generated/enums';
+import type { Languages, Protocols } from 'prisma/generated/enums';
 import type { JsonValue } from '@prisma/client/runtime/client';
 
 interface TelegramConfig {
@@ -13,50 +13,92 @@ interface TelegramConfig {
     vpnKey: JsonValue;
 }
 
+interface Translations {
+    header: string;
+    partOf: string;
+    configFor: string;
+    protocol: string;
+    expirationDate: string;
+    notSpecified: string;
+    notSet: string;
+    totalConfigs: string;
+}
+
+const translations: Record<Languages, Translations> = {
+    ENGLISH: {
+        header: 'VPN configurations from',
+        partOf: 'Part',
+        configFor: 'Configuration for',
+        protocol: 'Protocol',
+        expirationDate: 'Expiration date',
+        notSpecified: 'Not specified',
+        notSet: 'Not set',
+        totalConfigs: 'Total configurations',
+    },
+    RUSSIAN: {
+        header: 'VPN ключи от',
+        partOf: 'Часть',
+        configFor: 'Ключ для',
+        protocol: 'Протокол',
+        expirationDate: 'Дата истечения',
+        notSpecified: 'Не указан',
+        notSet: 'Не установлена',
+        totalConfigs: 'Всего ключей',
+    },
+};
+
+interface FormatConfigsOptions {
+    showHeader: boolean;
+    showFooter: boolean;
+    currentGroup: number;
+    totalGroups: number;
+    totalConfigs: number;
+    language: Languages;
+}
+
 function formatConfigsMessage(
     configs: TelegramConfig[],
     clientName: string,
-    options: {
-        showHeader: boolean;
-        showFooter: boolean;
-        currentGroup: number;
-        totalGroups: number;
-        totalConfigs: number;
-    }
+    options: FormatConfigsOptions
 ): string {
-    const { showHeader, showFooter, currentGroup, totalGroups, totalConfigs } = options;
+    const { showHeader, showFooter, currentGroup, totalGroups, totalConfigs, language } = options;
+
+    const t = translations[language];
 
     let message = '';
 
     if (showHeader) {
-        message += `🔐 <b>VPN configurations from ${process.env.NEXT_PUBLIC_VPN_NAME}</b>\n\n`;
+        message += `🔐 <b>${t.header} ${process.env.NEXT_PUBLIC_VPN_NAME}</b>\n\n`;
     }
 
     if (totalGroups > 1) {
-        message += `📦 Part ${currentGroup} of ${totalGroups}\n\n`;
+        message += `📦 ${t.partOf} ${currentGroup} ${language === 'RUSSIAN' ? 'из' : 'of'} ${totalGroups}\n\n`;
     }
 
     const configMessages = configs.map((config, index) => {
         const decryptedVpnKey = encryptionService.decryptField(config.vpnKey);
 
         const expiryDate = config.expiresAt
-            ? format(new Date(Number(config.expiresAt) * 1000), 'MM/dd/yyyy')
-            : 'Not set';
+            ? format(
+                  new Date(Number(config.expiresAt) * 1000),
+                  language === 'RUSSIAN' ? 'dd.MM.yyyy' : 'MM/dd/yyyy'
+              )
+            : t.notSet;
 
         const clientNameDisplay = config.clientName.startsWith(clientName)
             ? config.clientName.split('-')[1] || config.clientName
             : config.clientName;
 
-        return `Configuration for <b>${clientNameDisplay}</b>
-Protocol: <b>${protocolsMapping[config.protocol] || 'Not specified'}</b>
-Expiration date: <b>${expiryDate}</b>
+        return `${t.configFor} <b>${clientNameDisplay}</b>
+${t.protocol}: <b>${protocolsMapping[config.protocol] || t.notSpecified}</b>
+${t.expirationDate}: <b>${expiryDate}</b>
 <code>${decryptedVpnKey}</code>${index < configs.length - 1 ? '\n─────────────────────\n' : ''}`;
     });
 
     message += configMessages.join('\n');
 
     if (showFooter) {
-        message += `\n\n📦 Total configurations: ${totalConfigs}`;
+        message += `\n\n📦 ${t.totalConfigs}: ${totalConfigs}`;
     }
 
     return message;
@@ -65,6 +107,7 @@ Expiration date: <b>${expiryDate}</b>
 export async function sendConfigsToTelegram(
     clientName: string,
     telegramId: string,
+    language: Languages,
     configs?: TelegramConfig[]
 ) {
     if (!configs) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Error' });
@@ -89,6 +132,7 @@ export async function sendConfigsToTelegram(
             currentGroup: i + 1,
             totalGroups: configGroups.length,
             totalConfigs: configs.length,
+            language,
         });
 
         try {
@@ -113,6 +157,7 @@ export async function sendConfigsToTelegram(
                         currentGroup: i + 1,
                         totalGroups: configGroups.length,
                         totalConfigs: configs.length,
+                        language,
                     });
 
                     await telegramService.sendMessage(

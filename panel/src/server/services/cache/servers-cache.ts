@@ -7,24 +7,33 @@ import type { upsertServerFormData } from '@/lib/schemas/servers';
 
 type EncryptedValue = JsonValue | string | null;
 
-export interface CachedServer {
+export interface ICachedServer {
     name: string;
     ip: string;
     port: number;
     apiKey: EncryptedValue;
 }
 
+export interface ICachedServers {
+    id: number;
+    name: string;
+}
+
 export class ServersCacheService {
     private readonly CACHE_PREFIX = 'servers:';
 
-    private getCacheKey(serverId: number): string {
+    private getCacheKeyServerId(serverId: number): string {
         return `${this.CACHE_PREFIX}${serverId}`;
     }
 
-    async getServer(serverId: number): Promise<CachedServer | null> {
-        const cacheKey = this.getCacheKey(serverId);
+    private getCacheKeyServers(): string {
+        return `${this.CACHE_PREFIX}servers-select`;
+    }
 
-        const cached = cacheService.get<CachedServer>(cacheKey);
+    async getServer(serverId: number): Promise<ICachedServer | null> {
+        const cacheKey = this.getCacheKeyServerId(serverId);
+
+        const cached = cacheService.get<ICachedServer>(cacheKey);
         if (cached) return cached;
 
         const dbSettings = await db.servers.findUnique({
@@ -44,6 +53,26 @@ export class ServersCacheService {
         return dbSettings;
     }
 
+    async getServers(): Promise<ICachedServers[] | null> {
+        const cacheKey = this.getCacheKeyServers();
+
+        const cached = cacheService.get<ICachedServers[]>(cacheKey);
+        if (cached) return cached;
+
+        const servers = await db.servers.findMany({
+            select: {
+                id: true,
+                name: true,
+            },
+        });
+
+        if (!servers) return null;
+
+        cacheService.set(cacheKey, servers, TTL_CONFIG.SERVERS);
+
+        return servers;
+    }
+
     async getDecryptedApiKey(apiKey?: JsonValue): Promise<string | null> {
         return await encryptionService.decryptField(apiKey);
     }
@@ -57,7 +86,10 @@ export class ServersCacheService {
             update: { ...data, apiKey: encryptedApiKey },
         });
 
-        if (serverId) this.invalidateCache(serverId);
+        if (serverId) {
+            this.invalidateCacheServerId(serverId);
+            this.invalidateCacheServers();
+        }
     }
 
     async deleteServer(serverId: number): Promise<string> {
@@ -70,13 +102,19 @@ export class ServersCacheService {
             select: { name: true },
         });
 
-        this.invalidateCache(serverId);
+        this.invalidateCacheServerId(serverId);
+        this.invalidateCacheServers();
 
         return deletedServer.name;
     }
 
-    private invalidateCache(serverId: number): void {
-        const cacheKey = this.getCacheKey(serverId);
+    private invalidateCacheServerId(serverId: number): void {
+        const cacheKey = this.getCacheKeyServerId(serverId);
+        cacheService.delete(cacheKey);
+    }
+
+    private invalidateCacheServers(): void {
+        const cacheKey = this.getCacheKeyServers();
         cacheService.delete(cacheKey);
     }
 }

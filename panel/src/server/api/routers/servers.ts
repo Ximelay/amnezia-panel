@@ -13,13 +13,8 @@ import type { Prisma } from 'prisma/generated/client';
 import { serversCacheService } from '@/server/services/cache/servers-cache';
 
 export const serversRouter = createTRPCRouter({
-    getServers: publicProcedure.query(async ({ ctx }) => {
-        return await ctx.db.servers.findMany({
-            select: {
-                id: true,
-                name: true,
-            },
-        });
+    getServers: publicProcedure.query(async () => {
+        return await serversCacheService.getServers();
     }),
 
     getServerInfo: publicProcedure
@@ -54,8 +49,13 @@ export const serversRouter = createTRPCRouter({
 
     downloadBackup: publicProcedure
         .input(z.object({ serverId: z.number() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
             const { serverId } = input;
+
+            const foundServer = await ctx.db.servers.findUnique({
+                where: { id: serverId },
+                select: { name: true },
+            });
 
             const backup = await amneziaApiService.getServerBackup(serverId);
             const jsonString = JSON.stringify(backup, null, 2);
@@ -70,7 +70,7 @@ export const serversRouter = createTRPCRouter({
                 })
                 .replace(/\//g, '-');
 
-            const filename = `server-backup-${currentDate}.json`;
+            const filename = `${foundServer?.name}-backup-${currentDate}.json`;
 
             await logsService.createLog(
                 'SERVER',

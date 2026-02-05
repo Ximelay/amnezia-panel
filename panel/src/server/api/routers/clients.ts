@@ -295,6 +295,7 @@ export const clientsRouter = createTRPCRouter({
                 select: {
                     name: true,
                     telegramId: true,
+                    language: true,
                     Configs: {
                         select: {
                             vpnKey: true,
@@ -319,6 +320,7 @@ export const clientsRouter = createTRPCRouter({
             await sendConfigsToTelegram(
                 foundClient.name,
                 foundClient.telegramId,
+                foundClient.language,
                 foundClient.Configs
             );
 
@@ -334,6 +336,7 @@ export const clientsRouter = createTRPCRouter({
             select: {
                 name: true,
                 telegramId: true,
+                language: true,
                 Configs: {
                     select: {
                         vpnKey: true,
@@ -360,6 +363,7 @@ export const clientsRouter = createTRPCRouter({
             await sendConfigsToTelegram(
                 foundClient.name,
                 foundClient.telegramId,
+                foundClient.language,
                 foundClient.Configs
             );
         }
@@ -374,12 +378,14 @@ export const clientsRouter = createTRPCRouter({
 
             const foundClient = await ctx.db.clients.findUnique({
                 where: { id },
-                select: { telegramId: true, name: true },
+                select: { telegramId: true, name: true, language: true },
             });
             if (!foundClient?.telegramId)
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
 
-            const message = `For using <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> you need to download the open-source AmneziaVPN app.
+            const message =
+                foundClient.language === 'ENGLISH'
+                    ? `For using <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> you need to download the open-source AmneziaVPN app.
 
 <b>💻 Computers & Laptops</b>
 • <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_x64.exe">Windows</a> 
@@ -388,6 +394,17 @@ export const clientsRouter = createTRPCRouter({
 • <a href="https://docs.amnezia.org/documentation/installing-app-on-linux">Linux docs</a>
 
 <b>📱 Smartphones & Tablets</b>
+• <a href="https://play.google.com/store/apps/details?id=org.amnezia.vpn">Android</a>
+• <a href="https://apps.apple.com/us/app/amneziavpn/id1600529900">iPhone / iPad</a>`
+                    : `Для использования <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> вам нужно скачать приложение AmneziaVPN с открытым исходным кодом.
+
+<b>💻 Компьютеры и ноутбуки</b>
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_x64.exe">Windows</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_macos.zip">macOS</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_linux_x64.tar.zip">Linux</a>
+• <a href="https://docs.amnezia.org/documentation/installing-app-on-linux">Документация для Linux</a>
+
+<b>📱 Смартфоны и планшеты</b>
 • <a href="https://play.google.com/store/apps/details?id=org.amnezia.vpn">Android</a>
 • <a href="https://apps.apple.com/us/app/amneziavpn/id1600529900">iPhone / iPad</a>`;
 

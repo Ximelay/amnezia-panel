@@ -110,7 +110,7 @@ export const configsRouter = createTRPCRouter({
                     clientName: true,
                     expiresAt: true,
                     protocol: true,
-                    Clients: { select: { name: true, telegramId: true } },
+                    Clients: { select: { name: true, telegramId: true, language: true } },
                 },
             });
             if (!foundConfig)
@@ -124,13 +124,22 @@ export const configsRouter = createTRPCRouter({
 
             const decryptedVpnKey = encryptionService.decryptField(foundConfig.vpnKey);
             const expiryDate = foundConfig.expiresAt
-                ? format(new Date(Number(foundConfig.expiresAt) * 1000), 'MM/dd/yyyy')
+                ? foundConfig.Clients.language === 'ENGLISH'
+                    ? format(new Date(Number(foundConfig.expiresAt) * 1000), 'MM/dd/yyyy')
+                    : format(new Date(Number(foundConfig.expiresAt) * 1000), 'dd.MM.yyyy')
                 : 'Not set';
 
-            const message = `
+            const message =
+                foundConfig.Clients.language === 'ENGLISH'
+                    ? `
 🔐 New VPN configuration for <b>${foundConfig.clientName.startsWith(foundConfig.Clients.name) ? foundConfig.clientName.split('-')[1] : foundConfig.clientName}</b> from Ne4VPN
 Protocol: <b>${protocolsMapping[foundConfig.protocol] || 'Not specified'}</b>
 Expiration date: <b>${expiryDate}</b>
+<code>${decryptedVpnKey}</code>`
+                    : `
+🔐 Новый VPN ключ для <b>${foundConfig.clientName.startsWith(foundConfig.Clients.name) ? foundConfig.clientName.split('-')[1] : foundConfig.clientName}</b> от Ne4VPN
+Протокол: <b>${protocolsMapping[foundConfig.protocol] || 'Не указан'}</b>
+Дата истечения: <b>${expiryDate}</b>
 <code>${decryptedVpnKey}</code>`;
 
             await telegramService.sendMessage(
