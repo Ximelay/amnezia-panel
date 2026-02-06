@@ -196,6 +196,7 @@ export default function ClientsPage() {
                             <ConfigsWithClientsTable
                                 clients={data?.clients || []}
                                 orphanConfigs={data?.orphanConfigs || []}
+                                selectedServerId={selectedServerId}
                             />
                         </div>
                     )}

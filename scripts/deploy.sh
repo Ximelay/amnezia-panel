@@ -25,29 +25,6 @@ get_project_root() {
     echo "$(dirname "$script_dir")"
 }
 
-get_public_ip() {
-    local ip=""
-
-    if command -v curl &> /dev/null; then
-        ip=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || true)
-    fi
-
-    if [ -z "$ip" ] && command -v curl &> /dev/null; then
-        ip=$(curl -s --max-time 5 ipinfo.io/ip 2>/dev/null || true)
-    fi
-
-    if [ -z "$ip" ] && command -v dig &> /dev/null; then
-        ip=$(dig +short myip.opendns.com @resolver1.opendns.com 2>/dev/null || true)
-    fi
-
-    if [ -z "$ip" ]; then
-        ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "localhost")
-        print_warning "Could not get public IP, using local IP: $ip"
-    fi
-
-    echo "$ip"
-}
-
 generate_encryption_key() {
     if command -v node &> /dev/null; then
         node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" 2>/dev/null || echo ""
@@ -219,8 +196,6 @@ main() {
 
     print_message "Loading default values..."
 
-    PUBLIC_IP=$(get_public_ip)
-
     print_message "Configuring environment variables (press Enter to use default value):"
     echo "================================================"
 
@@ -246,12 +221,6 @@ main() {
 
     DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}"
 
-    AMNEZIA_API_HOST=$(prompt_with_default "AMNEZIA_API_HOST" "Amnezia API Host" "$PUBLIC_IP" false "$ENV_FILE")
-
-    AMNEZIA_API_PORT=$(prompt_with_default "AMNEZIA_API_PORT" "Amnezia API Port" "80" false "$ENV_FILE")
-
-    AMNEZIA_API_KEY=$(prompt_with_default "AMNEZIA_API_KEY" "Amnezia API Key" "" true "$ENV_FILE")
-
     TELEGRAM_BOT_TOKEN=$(prompt_with_default "TELEGRAM_BOT_TOKEN" "Telegram Bot Token (optional, press Enter for none)" "" true "$ENV_FILE")
 
     if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
@@ -274,6 +243,20 @@ main() {
         print_message "Using existing ENCRYPTION_KEY from .env"
     fi
 
+    CRON_SECRET=$(read_env_value "CRON_SECRET" "$ENV_FILE")
+    if [ -z "$CRON_SECRET" ]; then
+        print_message "Generating new CRON_SECRET..."
+        CRON_SECRET=$(generate_encryption_key)
+        if [ -n "$CRON_SECRET" ]; then
+            print_message "CRON_SECRET generated successfully"
+        else
+            print_error "Failed to generate CRON_SECRET"
+            exit 1
+        fi
+    else
+        print_message "Using existing CRON_SECRET from .env"
+    fi
+
     NODE_ENV=$(prompt_with_default "NODE_ENV" "Node environment (development/test/production)" "production" false "$ENV_FILE")
 
     print_message "Creating/updating .env file at $ENV_FILE..."
@@ -292,18 +275,14 @@ DB_PASSWORD="${DB_PASSWORD}"
 DB_NAME="${DB_NAME}"
 DATABASE_URL="${DATABASE_URL}"
 
-# Domain or IP address of AmneziaVPN
-AMNEZIA_API_HOST="${AMNEZIA_API_HOST}"
-# Port of Amnezia API
-AMNEZIA_API_PORT="${AMNEZIA_API_PORT}"
-# API key
-AMNEZIA_API_KEY="${AMNEZIA_API_KEY}"
-
 # Telegram Bot Token (optional)
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}"
 
 # Key for encrypt VPN config keys
 ENCRYPTION_KEY="${ENCRYPTION_KEY}"
+
+# Cron secret key
+CRON_SECRET="${CRON_SECRET}"
 
 # development or test or production
 NODE_ENV="${NODE_ENV}"

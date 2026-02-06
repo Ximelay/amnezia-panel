@@ -88,8 +88,8 @@ export class ServersCacheService {
 
         if (serverId) {
             this.invalidateCacheServerId(serverId);
-            this.invalidateCacheServers();
         }
+        this.invalidateCacheServers();
     }
 
     async deleteServer(serverId: number): Promise<string> {

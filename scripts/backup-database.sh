@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BACKUP_DIR="/root/backups"
+BACKUP_DIR="/root/backups/database"
 TIMESTAMP=$(date +"%Y%m%d%H%M%S")
 BACKUP_FILE="${BACKUP_DIR}/backup-${TIMESTAMP}.sql"
 
@@ -27,7 +27,7 @@ fi
 
 mkdir -p ${BACKUP_DIR}
 
-if ! docker exec db-amnezia-panel pg_dump -U ${DB_USER} ${DB_NAME} > "${BACKUP_FILE}"; then
+if ! docker exec db-amnezia-panel pg_dump --inserts --column-inserts -U ${DB_USER} ${DB_NAME} > "${BACKUP_FILE}"; then
     echo "Error: Failed to create database backup!"
     exit 1
 fi

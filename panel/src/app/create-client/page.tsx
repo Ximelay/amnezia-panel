@@ -32,13 +32,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { createClientSchema, type createClientFormData } from '@/lib/schemas/clients';
 import { useRouter } from 'next/navigation';
-import MultipleSelector from '@/components/ui/multi-select';
 
 export default function CreateClientPage() {
     const utils = api.useUtils();
     const router = useRouter();
 
     const { data: serversData, isLoading: isLoadingServers } = api.servers.getServers.useQuery();
+
+    const [clientServerId, setClientServerId] = useState<string>('none');
 
     const serverOptions = useMemo(() => {
         if (!serversData) return [];
@@ -48,21 +49,12 @@ export default function CreateClientPage() {
         }));
     }, [serversData]);
 
-    const [localServers, setLocalServers] = useState<typeof serversData>([]);
-
-    useEffect(() => {
-        if (serversData) {
-            setLocalServers(serversData);
-        }
-    }, [serversData]);
-
-    const form = useForm<createClientFormData & { clientServerId?: string }>({
+    const form = useForm<createClientFormData>({
         resolver: zodResolver(createClientSchema),
         defaultValues: {
             name: '',
             language: '',
             telegramId: '',
-            clientServerId: '',
             configs: [
                 {
                     serverId: 'none',
@@ -79,27 +71,29 @@ export default function CreateClientPage() {
         name: 'configs',
     });
 
-    const watchClientServerId = form.watch('clientServerId');
     const watchClientName = form.watch('name');
     const watchConfigs = form.watch('configs');
 
     useEffect(() => {
-        if (watchClientServerId) {
+        if (clientServerId && clientServerId !== 'none') {
             fields.forEach((_, index) => {
                 const currentServerId = form.getValues(`configs.${index}.serverId`);
-                if (!currentServerId) {
-                    form.setValue(`configs.${index}.serverId`, watchClientServerId, {
-                        shouldValidate: true,
+                if (!currentServerId || currentServerId === 'none') {
+                    form.setValue(`configs.${index}.serverId`, clientServerId, {
+                        shouldValidate: false,
+                        shouldDirty: false,
+                        shouldTouch: false,
                     });
                 }
             });
         }
-    }, [watchClientServerId, fields, form]);
+    }, [clientServerId, fields, form]);
 
     const createClientWithConfigs = api.clients.createClient.useMutation({
         onSuccess: () => {
             toast.success('Client and configs created successfully');
             form.reset();
+            setClientServerId('none');
             utils.clients.getClientsWithConfigs.invalidate();
             router.push('/');
         },
@@ -109,27 +103,34 @@ export default function CreateClientPage() {
         },
     });
 
-    const onSubmit = (data: createClientFormData & { clientServerId?: string }) => {
-        const configsWithClientNames = data.configs.map((config) => ({
+    const onSubmit = (data: createClientFormData) => {
+        // Преобразуем 'none' в пустую строку для serverId
+        const configsWithDefaultServer = data.configs.map((config) => ({
             ...config,
-            serverId: config.serverId || data.clientServerId || '',
+            serverId: config.serverId === 'none' ? '' : config.serverId,
             clientName:
                 data.name && config.clientName
                     ? `${data.name}-${config.clientName}`
                     : config.clientName,
         }));
 
+        // Подставляем clientServerId, если в конфиге serverId пустой
+        const finalConfigs = configsWithDefaultServer.map((config) => ({
+            ...config,
+            serverId: config.serverId || (clientServerId !== 'none' ? clientServerId : ''),
+        }));
+
         createClientWithConfigs.mutate({
             name: data.name,
             telegramId: data.telegramId || undefined,
             language: data.language,
-            configs: configsWithClientNames,
+            configs: finalConfigs,
         });
     };
 
     const addConfig = () => {
         const newConfig = {
-            serverId: '',
+            serverId: clientServerId !== 'none' ? clientServerId : 'none',
             clientName: '',
             expiresAt: '',
             protocol: 'AMNEZIAWG' as const,
@@ -146,18 +147,6 @@ export default function CreateClientPage() {
             shouldValidate: true,
             shouldDirty: true,
             shouldTouch: true,
-        });
-    };
-
-    const handleConfigServerChange = (index: number, serverId: string) => {
-        form.setValue(`configs.${index}.serverId`, serverId, {
-            shouldValidate: true,
-        });
-    };
-
-    const clearConfigServer = (index: number) => {
-        form.setValue(`configs.${index}.serverId`, '', {
-            shouldValidate: true,
         });
     };
 
@@ -196,61 +185,35 @@ export default function CreateClientPage() {
                                 )}
                             />
 
-                            {isLoadingServers || !localServers ? (
+                            {isLoadingServers ? (
                                 <div className="flex items-center justify-center py-4">
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     <span className="ml-2 text-sm">Loading servers...</span>
                                 </div>
                             ) : (
-                                <FormField
-                                    control={form.control}
-                                    name="clientServerId"
-                                    render={({ field }) => {
-                                        const currentValue = useMemo(() => {
-                                            if (!field.value) return [];
-                                            const server = localServers?.find(
-                                                (c) => String(c.id) === String(field.value)
-                                            );
-                                            return server
-                                                ? [
-                                                      {
-                                                          value: String(server.id),
-                                                          label: server.name,
-                                                      },
-                                                  ]
-                                                : [];
-                                        }, [field.value, localServers]);
-
-                                        return (
-                                            <FormItem>
-                                                <FormLabel>Default Server</FormLabel>
-                                                <MultipleSelector
-                                                    value={currentValue}
-                                                    onChange={(selectedOptions) => {
-                                                        if (selectedOptions.length === 0) {
-                                                            field.onChange('');
-                                                        } else {
-                                                            field.onChange(
-                                                                selectedOptions[0]?.value || ''
-                                                            );
-                                                        }
-                                                    }}
-                                                    options={serverOptions}
-                                                    placeholder="Search server..."
-                                                    emptyIndicator={
-                                                        <p className="text-center text-sm">
-                                                            No results found
-                                                        </p>
-                                                    }
-                                                    className="w-full"
-                                                    maxSelected={1}
-                                                    hidePlaceholderWhenSelected
-                                                />
-                                                <FormMessage />
-                                            </FormItem>
-                                        );
-                                    }}
-                                />
+                                <FormItem>
+                                    <FormLabel>Default Server</FormLabel>
+                                    <Select
+                                        value={clientServerId}
+                                        onValueChange={(value) => {
+                                            setClientServerId(value);
+                                        }}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select default server" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="none">None</SelectItem>
+                                            {serverOptions.map((server) => (
+                                                <SelectItem key={server.value} value={server.value}>
+                                                    {server.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
                             )}
 
                             <FormField
@@ -347,12 +310,12 @@ export default function CreateClientPage() {
                                                 ? `${watchClientName}-${configClientName}`
                                                 : configClientName || '[waiting for input]';
 
-                                        const clientServer = serversData?.find(
-                                            (server) => String(server.id) === watchClientServerId
-                                        );
-
                                         const selectedServer = serversData?.find(
                                             (server) => String(server.id) === configServerId
+                                        );
+
+                                        const clientServer = serversData?.find(
+                                            (server) => String(server.id) === clientServerId
                                         );
 
                                         return (
@@ -376,152 +339,97 @@ export default function CreateClientPage() {
                                                 </div>
 
                                                 <div className="bg-muted/50 rounded-md p-3">
-                                                    <div className="mb-2 flex items-center justify-between">
-                                                        <div className="text-sm font-medium">
-                                                            Server Configuration:
-                                                        </div>
-                                                        {configServerId &&
-                                                            configServerId !==
-                                                                watchClientServerId && (
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    onClick={() =>
-                                                                        clearConfigServer(index)
-                                                                    }
-                                                                    className="h-7 text-xs">
-                                                                    Reset to client server
-                                                                </Button>
-                                                            )}
+                                                    <div className="mb-2 text-sm font-medium">
+                                                        Server Configuration:
                                                     </div>
-
-                                                    {configServerId === watchClientServerId ||
-                                                    !configServerId ? (
-                                                        <div className="text-sm">
-                                                            <span className="text-muted-foreground">
-                                                                Using client server:{' '}
-                                                            </span>
-                                                            <span className="font-medium">
-                                                                {clientServer?.name ||
-                                                                    'Not selected'}
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="text-sm">
-                                                            <span className="text-muted-foreground">
-                                                                Custom server:{' '}
-                                                            </span>
-                                                            <span className="font-medium">
-                                                                {selectedServer?.name}
-                                                            </span>
-                                                        </div>
-                                                    )}
+                                                    <div className="text-sm">
+                                                        {configServerId &&
+                                                        configServerId !== 'none' ? (
+                                                            <>
+                                                                <span className="text-muted-foreground">
+                                                                    Selected server:{' '}
+                                                                </span>
+                                                                <span className="font-medium">
+                                                                    {selectedServer?.name ||
+                                                                        (configServerId ===
+                                                                        clientServerId
+                                                                            ? `${clientServer?.name} (client default)`
+                                                                            : 'Unknown server')}
+                                                                </span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <span className="text-muted-foreground">
+                                                                    Using client default:{' '}
+                                                                </span>
+                                                                <span className="font-medium">
+                                                                    {clientServer?.name ||
+                                                                        'Not selected'}
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </div>
 
-                                                <div className="space-y-2">
-                                                    <FormLabel>Server (Optional)</FormLabel>
-
-                                                    {isLoadingServers || !localServers ? (
-                                                        <div className="flex items-center justify-center py-4">
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                            <span className="ml-2 text-sm">
-                                                                Loading servers...
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="space-y-2">
-                                                            <MultipleSelector
-                                                                value={(() => {
-                                                                    if (
-                                                                        !configServerId ||
-                                                                        configServerId ===
-                                                                            watchClientServerId
-                                                                    ) {
-                                                                        return [
-                                                                            {
-                                                                                value: 'client-server',
-                                                                                label: `Use client server: ${clientServer?.name || 'Not selected'}`,
-                                                                            },
-                                                                        ];
-                                                                    }
-
-                                                                    const server =
-                                                                        serversData?.find(
-                                                                            (s) =>
-                                                                                String(s.id) ===
-                                                                                configServerId
-                                                                        );
-                                                                    return server
-                                                                        ? [
-                                                                              {
-                                                                                  value: String(
-                                                                                      server.id
-                                                                                  ),
-                                                                                  label: server.name,
-                                                                              },
-                                                                          ]
-                                                                        : [];
-                                                                })()}
-                                                                onChange={(selectedOptions) => {
-                                                                    if (
-                                                                        selectedOptions.length === 0
-                                                                    ) {
-                                                                        handleConfigServerChange(
-                                                                            index,
-                                                                            ''
-                                                                        );
-                                                                    } else {
-                                                                        const selectedValue =
-                                                                            selectedOptions[0]
-                                                                                ?.value;
-                                                                        if (
-                                                                            selectedValue ===
-                                                                            'client-server'
-                                                                        ) {
-                                                                            handleConfigServerChange(
-                                                                                index,
-                                                                                ''
-                                                                            );
-                                                                        } else {
-                                                                            if (selectedValue)
-                                                                                handleConfigServerChange(
-                                                                                    index,
-                                                                                    selectedValue
-                                                                                );
-                                                                        }
-                                                                    }
-                                                                }}
-                                                                options={(() => {
-                                                                    const baseOptions =
-                                                                        serverOptions;
-                                                                    const clientServerOption = {
-                                                                        value: 'client-server',
-                                                                        label: `Use client server: ${clientServer?.name || 'Not selected'}`,
-                                                                    };
-                                                                    return [
-                                                                        clientServerOption,
-                                                                        ...baseOptions,
-                                                                    ];
-                                                                })()}
-                                                                placeholder="Select server..."
-                                                                emptyIndicator={
-                                                                    <p className="text-center text-sm">
-                                                                        No servers available
-                                                                    </p>
-                                                                }
-                                                                className="w-full"
-                                                                maxSelected={1}
-                                                                hidePlaceholderWhenSelected
-                                                            />
-
+                                                <FormField
+                                                    control={form.control}
+                                                    name={`configs.${index}.serverId`}
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>
+                                                                Server{' '}
+                                                                <span className="text-destructive">
+                                                                    *
+                                                                </span>
+                                                            </FormLabel>
+                                                            {isLoadingServers ? (
+                                                                <div className="flex items-center justify-center py-4">
+                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    <span className="ml-2 text-sm">
+                                                                        Loading servers...
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <Select
+                                                                    value={field.value}
+                                                                    onValueChange={(value) => {
+                                                                        field.onChange(value);
+                                                                    }}>
+                                                                    <FormControl>
+                                                                        <SelectTrigger>
+                                                                            <SelectValue placeholder="Select server" />
+                                                                        </SelectTrigger>
+                                                                    </FormControl>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="none">
+                                                                            Use client default
+                                                                            server
+                                                                        </SelectItem>
+                                                                        {serverOptions.map(
+                                                                            (server) => (
+                                                                                <SelectItem
+                                                                                    key={
+                                                                                        server.value
+                                                                                    }
+                                                                                    value={
+                                                                                        server.value
+                                                                                    }>
+                                                                                    {server.label}
+                                                                                </SelectItem>
+                                                                            )
+                                                                        )}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            )}
                                                             <div className="text-muted-foreground text-xs">
-                                                                Select "Use client server" to
-                                                                inherit from client's default server
+                                                                Select "Use client default server"
+                                                                to inherit from client's default
+                                                                server
                                                             </div>
-                                                        </div>
+                                                            <FormMessage />
+                                                        </FormItem>
                                                     )}
-                                                </div>
+                                                />
 
                                                 <FormField
                                                     control={form.control}
@@ -739,9 +647,10 @@ export default function CreateClientPage() {
                             variant="outline"
                             onClick={() => {
                                 form.reset();
+                                setClientServerId('none');
                                 remove();
                                 append({
-                                    serverId: '',
+                                    serverId: 'none',
                                     clientName: '',
                                     expiresAt: '',
                                     protocol: 'AMNEZIAWG',

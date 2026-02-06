@@ -37,6 +37,7 @@ import { ConfigDialog } from './config-dialog';
 import { api } from '@/trpc/react';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { AddConfigClientDialog } from './add-config-dialog';
 
 interface ConfigsWithClientsProps {
     clients: Array<{
@@ -81,11 +82,13 @@ interface ConfigsWithClientsProps {
         clientId: number | null;
         serverId: number;
     }>;
+    selectedServerId: string;
 }
 
 export function ConfigsWithClientsTable({
     clients,
     orphanConfigs,
+    selectedServerId,
 }: Readonly<ConfigsWithClientsProps>) {
     const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
 
@@ -118,6 +121,7 @@ export function ConfigsWithClientsTable({
                     <ClientRow
                         key={client.id}
                         client={client}
+                        selectedServerId={selectedServerId}
                         isExpanded={expandedClients.has(String(client.id))}
                         onToggle={() => toggleClient(String(client.id))}
                     />
@@ -134,6 +138,7 @@ export function ConfigsWithClientsTable({
 function ClientRow({
     client,
     isExpanded,
+    selectedServerId,
     onToggle,
 }: Readonly<{
     client: {
@@ -161,6 +166,7 @@ function ClientRow({
             serverId: number;
         }>;
     };
+    selectedServerId: string;
     isExpanded: boolean;
     onToggle: () => void;
 }>) {
@@ -329,6 +335,11 @@ function ClientRow({
                 </TableCell>
                 <TableCell>
                     <div className="flex items-center justify-end gap-1">
+                        <AddConfigClientDialog
+                            clientId={String(client.id)}
+                            clientName={client.name}
+                            serverId={selectedServerId}
+                        />
                         <UpdateClientDialog
                             id={client.id}
                             name={client.name}
