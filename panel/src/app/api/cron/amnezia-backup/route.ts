@@ -19,16 +19,15 @@ export async function POST(req: NextRequest) {
             select: { id: true },
         });
 
-        if (!foundServer) throw new Error('Server not found');
+        if (!foundServer) return NextResponse.json({ error: 'Server not found' }, { status: 404 });
 
-        return await amneziaApiService.getServerBackup(foundServer.id);
+        const backupResult = await amneziaApiService.getServerBackup(foundServer.id);
+
+        return NextResponse.json(backupResult, { status: 200 });
     } catch (error) {
-        console.error(error);
+        console.error('Backup error:', error);
 
-        if (error instanceof Error) {
-            if (error.message === 'Server not found')
-                return NextResponse.json({ error: 'Server not found' }, { status: 404 });
-        }
+        if (error instanceof NextResponse) return error;
 
         return NextResponse.json({ error: 'Failed to backup Amnezia configs' }, { status: 500 });
     }
