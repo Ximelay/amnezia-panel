@@ -49,7 +49,7 @@ export function UpsertServerDialog({ server, trigger }: Props) {
             id: undefined,
             name: '',
             ip: '',
-            port: 80,
+            port: '80',
             apiKey: '',
         },
     });
@@ -78,7 +78,7 @@ export function UpsertServerDialog({ server, trigger }: Props) {
                 id: server.id,
                 name: server.name,
                 ip: server.ip,
-                port: server.port,
+                port: String(server.port),
                 apiKey: server.apiKey || undefined,
             });
         }
@@ -100,7 +100,7 @@ export function UpsertServerDialog({ server, trigger }: Props) {
             <DialogTrigger asChild>{trigger || defaultTrigger}</DialogTrigger>
             <DialogContent className="sm:max-w-131.25">
                 <DialogHeader>
-                    <DialogTitle>{server ? 'Edit' : 'Add'} new server</DialogTitle>
+                    <DialogTitle>{server ? 'Edit' : 'Add new'} server</DialogTitle>
                     <DialogDescription>Fill in the information for the server</DialogDescription>
                 </DialogHeader>
 
@@ -147,7 +147,7 @@ export function UpsertServerDialog({ server, trigger }: Props) {
                                         Port <span className="text-destructive">*</span>
                                     </FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Enter port" type="number" {...field} />
+                                        <Input placeholder="Enter port" {...field} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

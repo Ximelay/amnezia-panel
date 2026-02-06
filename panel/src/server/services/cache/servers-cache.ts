@@ -82,8 +82,8 @@ export class ServersCacheService {
 
         await db.servers.upsert({
             where: { id: serverId || -1 },
-            create: { ...data, apiKey: encryptedApiKey },
-            update: { ...data, apiKey: encryptedApiKey },
+            create: { ...data, port: Number(data.port), apiKey: encryptedApiKey },
+            update: { ...data, port: Number(data.port), apiKey: encryptedApiKey },
         });
 
         if (serverId) {
