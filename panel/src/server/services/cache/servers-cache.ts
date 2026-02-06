@@ -1,6 +1,6 @@
 import { TTL_CONFIG } from '@/server/enums';
 import { cacheService } from './cache';
-import type { InputJsonValue, JsonNullClass, JsonValue } from '@prisma/client/runtime/client';
+import type { JsonValue } from '@prisma/client/runtime/client';
 import { db } from '@/server/db';
 import { encryptionService } from '../encryption';
 import type { upsertServerFormData } from '@/lib/schemas/servers';

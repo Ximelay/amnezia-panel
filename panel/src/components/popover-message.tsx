@@ -26,7 +26,7 @@ export const PopoverMessage = ({ message }: Readonly<Props>) => {
                         Full message
                     </h4>
                 </div>
-                <ScrollArea className="h-[200px] px-4">
+                <ScrollArea className="h-50 px-4">
                     <p className="text-sm text-pretty leading-relaxed pb-4 wrap-break-word">
                         {message}
                     </p>

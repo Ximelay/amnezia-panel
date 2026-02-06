@@ -11,7 +11,7 @@ import type {
     ServerBackupZod,
     GetServerLoadResponse,
 } from '../interfaces/amnezia-api';
-import { serversCacheService, type CachedServer } from './cache/servers-cache';
+import { serversCacheService, type ICachedServer } from './cache/servers-cache';
 
 // interface UniversalResponse {
 //     ok: boolean;
@@ -28,7 +28,7 @@ class AmneziaApiService {
     private readonly maxRetries = 3;
     private readonly retryDelay = 1000;
 
-    private async getApiServer(serverId: number): Promise<CachedServer> {
+    private async getApiServer(serverId: number): Promise<ICachedServer> {
         const server = await serversCacheService.getServer(serverId);
         if (!server?.apiKey) {
             throw new Error('Amnezia API key is required but not available');
@@ -39,7 +39,7 @@ class AmneziaApiService {
     private async getFetchOptions(
         serverId: number,
         method: string,
-        server?: CachedServer
+        server?: ICachedServer
     ): Promise<RequestInit> {
         const headers: HeadersInit = {
             Accept: 'application/json',
