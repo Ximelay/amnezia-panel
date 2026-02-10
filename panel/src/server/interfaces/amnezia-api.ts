@@ -15,6 +15,7 @@ export interface IPeer {
     online: boolean;
     expiresAt: number;
     protocol: Protocol;
+    status: string;
 }
 
 export interface IClient {

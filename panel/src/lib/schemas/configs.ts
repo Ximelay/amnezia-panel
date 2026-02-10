@@ -17,3 +17,10 @@ export const updateClientConfigSchema = z.object({
 });
 
 export type updateClientConfigFormData = z.infer<typeof updateClientConfigSchema>;
+
+export const updateExpiresAtSchema = z.object({
+    id: z.string().min(1),
+    expiresAt: z.string().min(1),
+});
+
+export type updateExpiresAtFormData = z.infer<typeof updateExpiresAtSchema>;

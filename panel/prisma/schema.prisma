@@ -24,6 +24,7 @@ model Clients {
     name       String
     language   Languages
     telegramId String?
+    status     Boolean   @default(true)
     Configs    Configs[]
 }
 
@@ -33,6 +34,7 @@ model Configs {
     clientName String
     vpnKey     Json
     expiresAt  String?
+    status     Boolean   @default(true)
     protocol   Protocols
     clientId   Int?
     serverId   Int

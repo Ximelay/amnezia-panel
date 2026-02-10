@@ -261,6 +261,38 @@ class AmneziaApiService {
         }
     }
 
+    async updateConfig(
+        serverId: number,
+        clientId: string, // configId
+        expiresAt?: string,
+        status?: string,
+        protocol?: Protocol
+    ): Promise<MessageResponse> {
+        try {
+            return await this.makeRequestWithRetry<MessageResponse>(serverId, 'clients', 'PATCH', {
+                clientId,
+                protocol,
+                expiresAt,
+                status,
+            });
+        } catch (error) {
+            await logsService.createLog(
+                'SERVER',
+                'ERROR',
+                `Failed to update config: ${error instanceof TRPCError || error instanceof Error ? error.message : 'Unknown error'}`
+            );
+
+            if (error instanceof TRPCError) {
+                throw error;
+            }
+
+            throw new TRPCError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: `Failed to create config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            });
+        }
+    }
+
     async deleteConfig(
         serverId: number,
         clientId: string,
@@ -299,7 +331,11 @@ class AmneziaApiService {
 
     async getServerInfo(serverId: number): Promise<GetServerInfoResponse> {
         try {
-            return await this.makeRequestWithRetry<GetServerInfoResponse>(serverId, 'server', 'GET');
+            return await this.makeRequestWithRetry<GetServerInfoResponse>(
+                serverId,
+                'server',
+                'GET'
+            );
         } catch (error) {
             await logsService.createLog(
                 'SERVER',

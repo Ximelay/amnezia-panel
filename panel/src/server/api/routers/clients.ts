@@ -16,6 +16,7 @@ import { logsService } from '@/server/services/logs';
 import { TRPCError } from '@trpc/server';
 import { sendConfigsToTelegram } from '@/server/services/telegram/telegram-messages';
 import { telegramService } from '@/server/services/telegram/telegram';
+import { updateExpiresAtSchema } from '@/lib/schemas/configs';
 
 export const clientsRouter = createTRPCRouter({
     getClients: publicProcedure
@@ -88,6 +89,7 @@ export const clientsRouter = createTRPCRouter({
                         protocol: true,
                         clientId: true,
                         serverId: true,
+                        status: true,
                     },
                     orderBy: {
                         createdAt: 'desc',
@@ -114,6 +116,7 @@ export const clientsRouter = createTRPCRouter({
                 if (apiDevice) {
                     return {
                         ...config,
+                        status: apiDevice.status === 'active' ? true : false,
                         online: apiDevice.online,
                         lastHandshake: String(apiDevice.lastHandshake),
                         traffic: apiDevice.traffic,
@@ -127,6 +130,7 @@ export const clientsRouter = createTRPCRouter({
 
                 return {
                     ...config,
+                    status: false,
                     online: false,
                     lastHandshake: null,
                     traffic: { received: 0, sent: 0 },
@@ -143,6 +147,7 @@ export const clientsRouter = createTRPCRouter({
                     mergedConfigs.push({
                         id: apiDevice.id,
                         createdAt: new Date(),
+                        status: apiDevice.device.status === 'active' ? true : false,
                         clientName: apiDevice.clientName,
                         expiresAt: apiDevice.device.expiresAt
                             ? String(apiDevice.device.expiresAt)
@@ -193,6 +198,7 @@ export const clientsRouter = createTRPCRouter({
                     createdAt: client.createdAt,
                     name: client.name,
                     language: client.language,
+                    status: client.status,
                     telegramId: client.telegramId,
                     configs: clientConfigs,
                     configsCount: clientConfigs.length,
@@ -400,7 +406,7 @@ export const clientsRouter = createTRPCRouter({
 <b>📱 Smartphones & Tablets</b>
 • <a href="https://play.google.com/store/apps/details?id=org.amnezia.vpn">Android</a>
 • <a href="https://apps.apple.com/us/app/amneziavpn/id1600529900">iPhone / iPad</a>`
-                    : `Для использования <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> вам нужно скачать приложение AmneziaVPN с открытым исходным кодом.
+                    : `Для использования <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> вам нужно скачать open-source приложение AmneziaVPN.
 
 <b>💻 Компьютеры и ноутбуки</b>
 • <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_x64.exe">Windows</a> 
@@ -499,5 +505,64 @@ export const clientsRouter = createTRPCRouter({
                     `Notification sent to client ${foundClient.name}`
                 );
             }
+        }),
+
+    updateExpiresAt: publicProcedure
+        .input(updateExpiresAtSchema)
+        .mutation(async ({ ctx, input }) => {
+            const { id, expiresAt } = input;
+
+            const foundClient = await ctx.db.clients.findUnique({
+                where: { id: Number(id) },
+                select: { name: true, Configs: { select: { id: true, serverId: true } } },
+            });
+            if (!foundClient)
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
+
+            for (const config of foundClient.Configs)
+                await amneziaApiService.updateConfig(config.serverId, config.id, expiresAt);
+
+            await ctx.db.configs.updateMany({
+                where: { clientId: Number(id) },
+                data: { expiresAt },
+            });
+
+            await logsService.createLog(
+                'CLIENT',
+                'INFO',
+                `Dates of config were changed for client ${foundClient.name}`
+            );
+        }),
+
+    updateStatus: publicProcedure
+        .input(z.object({ clientId: z.number().min(1), status: z.string().min(1) }))
+        .mutation(async ({ ctx, input }) => {
+            const { clientId, status } = input;
+
+            const foundClient = await ctx.db.clients.findUnique({
+                where: { id: clientId },
+                select: { name: true, Configs: { select: { id: true, serverId: true } } },
+            });
+            if (!foundClient)
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
+
+            for (const config of foundClient.Configs)
+                await amneziaApiService.updateConfig(config.serverId, config.id, undefined, status);
+
+            await ctx.db.clients.update({
+                where: { id: clientId },
+                data: { status: status === 'active' ? true : false },
+            });
+
+            await ctx.db.configs.updateMany({
+                where: { clientId },
+                data: { status: status === 'active' ? true : false },
+            });
+
+            await logsService.createLog(
+                'CLIENT',
+                'INFO',
+                `Statuses of config were changed for client ${foundClient.name}`
+            );
         }),
 });

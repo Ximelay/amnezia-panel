@@ -38,12 +38,15 @@ import { api } from '@/trpc/react';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { AddConfigClientDialog } from './add-config-dialog';
+import { Switch } from '@/components/ui/switch';
+import { UpdateExpiresAtDialog } from './update-expires-at-dialog';
 
 interface ConfigsWithClientsProps {
     clients: Array<{
         id: number;
         name: string;
         language: Languages;
+        status: boolean;
         telegramId: string | null;
         createdAt: Date;
         configsCount: number;
@@ -52,6 +55,7 @@ interface ConfigsWithClientsProps {
             clientName: string;
             protocol: Protocols;
             online: boolean;
+            status: boolean;
             lastHandshake: string | null;
             traffic: {
                 received: number;
@@ -70,6 +74,7 @@ interface ConfigsWithClientsProps {
         clientName: string;
         protocol: Protocols;
         online: boolean;
+        status: boolean;
         lastHandshake: string | null;
         traffic: {
             received: number;
@@ -109,10 +114,11 @@ export function ConfigsWithClientsTable({
                     <TableHead className="w-12.5"></TableHead>
                     <TableHead>User</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Protocol</TableHead>
-                    <TableHead>Traffic</TableHead>
-                    <TableHead>Last handshake</TableHead>
+                    <TableHead>Online</TableHead>
                     <TableHead>Expires at</TableHead>
+                    <TableHead>Protocol</TableHead>
+                    <TableHead>Last handshake</TableHead>
+                    <TableHead>Traffic</TableHead>
                     <TableHead className="w-25">Actions</TableHead>
                 </TableRow>
             </TableHeader>
@@ -145,6 +151,7 @@ function ClientRow({
         id: number;
         name: string;
         language: Languages;
+        status: boolean;
         telegramId: string | null;
         createdAt: Date;
         configsCount: number;
@@ -152,6 +159,7 @@ function ClientRow({
             id: string;
             clientName: string;
             protocol: Protocols;
+            status: boolean;
             online: boolean;
             lastHandshake: string | null;
             traffic: {
@@ -170,6 +178,8 @@ function ClientRow({
     isExpanded: boolean;
     onToggle: () => void;
 }>) {
+    const utils = api.useUtils();
+
     const [copiedChatId, setCopiedChatId] = useState(false);
 
     const configsWord = useMemo(() => {
@@ -212,6 +222,24 @@ function ClientRow({
 
     const onSubmitLinks = () => {
         sendLinks.mutate({ id: client.id });
+    };
+
+    const updateStatus = api.clients.updateStatus.useMutation({
+        onSuccess: () => {
+            toast.success('Status was changed successfully');
+            utils.clients.getClientsWithConfigs.invalidate();
+        },
+        onError: (error) => {
+            toast.error('Failed to change status');
+            console.error(error);
+        },
+    });
+
+    const onToggleStatus = (newStatus: boolean) => {
+        updateStatus.mutate({
+            clientId: client.id,
+            status: newStatus ? 'active' : 'disabled',
+        });
     };
 
     const copyChatIdToClipboard = async (chatId: string | null) => {
@@ -280,14 +308,42 @@ function ClientRow({
                     </div>
                 </TableCell>
                 <TableCell>
+                    <Switch
+                        checked={client.status}
+                        onCheckedChange={onToggleStatus}
+                        disabled={updateStatus.isPending}
+                    />
+                    {updateStatus.isPending && (
+                        <Loader2 className="ml-2 inline h-3 w-3 animate-spin" />
+                    )}
+                </TableCell>
+                <TableCell>
                     <span className="text-muted-foreground">
                         {client.configsCount} {configsWord}
                     </span>
                 </TableCell>
                 <TableCell>
-                    <Badge variant="secondary">Client</Badge>
+                    <UpdateExpiresAtDialog isClient id={String(client.id)} />
                 </TableCell>
-                <TableCell>{formatBytes(totalTraffic)}</TableCell>
+                <TableCell>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                disabled={sendConfigs.isPending}
+                                onClick={onSubmitConfigs}
+                                size="sm"
+                                variant="outline">
+                                {sendConfigs.isPending && (
+                                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                )}
+                                {sendConfigs.isPending ? 'Sending...' : 'Send configs'}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Send config keys to Telegram</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TableCell>
                 <TableCell>
                     {process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true' && client.telegramId ? (
                         <Tooltip>
@@ -311,28 +367,7 @@ function ClientRow({
                         '—'
                     )}
                 </TableCell>
-                <TableCell>
-                    {process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true' && client.telegramId ? (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    disabled={sendConfigs.isPending}
-                                    onClick={onSubmitConfigs}
-                                    size="sm">
-                                    {sendConfigs.isPending && (
-                                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                                    )}
-                                    {sendConfigs.isPending ? 'Sending...' : 'Send configs'}
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Send client configs to Telegram</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    ) : (
-                        '—'
-                    )}
-                </TableCell>
+                <TableCell>{formatBytes(totalTraffic)}</TableCell>
                 <TableCell>
                     <div className="flex items-center justify-end gap-1">
                         <AddConfigClientDialog
@@ -368,6 +403,7 @@ function ConfigRow({
         clientName: string;
         protocol: Protocols;
         online: boolean;
+        status: boolean;
         lastHandshake: string | null;
         traffic: {
             received: number;
@@ -382,8 +418,10 @@ function ConfigRow({
     };
     isNested?: boolean;
 }>) {
+    const utils = api.useUtils();
+
     const totalTraffic = config.traffic.received + config.traffic.sent;
-    const NumberExpiresAt = Number(config.expiresAt);
+    const numberExpiresAt = Number(config.expiresAt);
 
     const sendMessage = api.configs.sendVpnKey.useMutation({
         onSuccess: () => {
@@ -398,6 +436,24 @@ function ConfigRow({
         sendMessage.mutate({ id: config.id });
     };
 
+    const updateStatus = api.configs.updateStatus.useMutation({
+        onSuccess: () => {
+            toast.success('Status was changed successfully');
+            utils.clients.getClientsWithConfigs.invalidate();
+        },
+        onError: (error) => {
+            toast.error('Failed to change status');
+            console.error(error);
+        },
+    });
+
+    const onToggleStatus = (newStatus: boolean) => {
+        updateStatus.mutate({
+            id: config.id,
+            status: newStatus ? 'active' : 'disabled',
+        });
+    };
+
     return (
         <TableRow className={isNested ? 'bg-muted/20' : ''}>
             <TableCell>{isNested && <div className="ml-4"></div>}</TableCell>
@@ -405,6 +461,14 @@ function ConfigRow({
                 <div className={`flex items-center gap-2 ${isNested ? 'ml-6' : ''}`}>
                     <span>{config.clientName}</span>
                 </div>
+            </TableCell>
+            <TableCell>
+                <Switch
+                    checked={config.status}
+                    onCheckedChange={onToggleStatus}
+                    disabled={updateStatus.isPending}
+                />
+                {updateStatus.isPending && <Loader2 className="ml-2 inline h-3 w-3 animate-spin" />}
             </TableCell>
             <TableCell>
                 <Badge
@@ -418,13 +482,22 @@ function ConfigRow({
                 </Badge>
             </TableCell>
             <TableCell>
+                <div className="flex items-center">
+                    {formatDate(numberExpiresAt * 1000)}
+                    <UpdateExpiresAtDialog
+                        isClient={false}
+                        id={config.id}
+                        expiresAt={config.expiresAt}
+                    />
+                </div>
+            </TableCell>
+            <TableCell>
                 <Badge variant="default" className={getProtocolColor(config.protocol)}>
                     {protocolsMapping[config.protocol]}
                 </Badge>
             </TableCell>
-            <TableCell>{formatBytes(totalTraffic)}</TableCell>
             <TableCell>{formatLastHandshake(config.lastHandshake)}</TableCell>
-            <TableCell>{formatDate(NumberExpiresAt * 1000)}</TableCell>
+            <TableCell>{formatBytes(totalTraffic)}</TableCell>
             <TableCell>
                 <div className="flex items-center justify-end gap-2">
                     {process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true' && isNested && (

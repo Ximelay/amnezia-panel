@@ -1,7 +1,11 @@
 import { z } from 'zod';
 
 import { createTRPCRouter, publicProcedure } from '@/server/api/trpc';
-import { createConfigSchema, updateClientConfigSchema } from '@/lib/schemas/configs';
+import {
+    createConfigSchema,
+    updateClientConfigSchema,
+    updateExpiresAtSchema,
+} from '@/lib/schemas/configs';
 import { amneziaApiService } from '@/server/services/amnezia-api';
 import { protocolsApiMapping, protocolsMapping } from '@/lib/data/mappings';
 import { encryptionService } from '@/server/services/encryption';
@@ -155,6 +159,62 @@ Expiration date: <b>${expiryDate}</b>
                 'TELEGRAM',
                 'INFO',
                 `VPN key of ${foundConfig?.clientName} sent`
+            );
+        }),
+
+    updateExpiresAt: publicProcedure
+        .input(updateExpiresAtSchema)
+        .mutation(async ({ ctx, input }) => {
+            const { id, expiresAt } = input;
+
+            const foundConfig = await ctx.db.configs.findUnique({
+                where: { id },
+                select: { serverId: true, clientName: true },
+            });
+            if (!foundConfig)
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Config not found' });
+
+            await amneziaApiService.updateConfig(foundConfig.serverId, id, expiresAt);
+
+            if (foundConfig) {
+                await ctx.db.configs.update({
+                    where: { id },
+                    data: { expiresAt },
+                });
+            }
+
+            await logsService.createLog(
+                'CLIENT',
+                'INFO',
+                `Config ${foundConfig.clientName} date was changed`
+            );
+        }),
+
+    updateStatus: publicProcedure
+        .input(z.object({ id: z.string().min(1), status: z.string().min(1) }))
+        .mutation(async ({ ctx, input }) => {
+            const { id, status } = input;
+
+            const foundConfig = await ctx.db.configs.findUnique({
+                where: { id },
+                select: { serverId: true, clientName: true },
+            });
+            if (!foundConfig)
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Config not found' });
+
+            await amneziaApiService.updateConfig(foundConfig.serverId, id, undefined, status);
+
+            if (foundConfig) {
+                await ctx.db.configs.update({
+                    where: { id },
+                    data: { status: status === 'active' ? true : false },
+                });
+            }
+
+            await logsService.createLog(
+                'CLIENT',
+                'INFO',
+                `Config ${foundConfig.clientName} status was changed`
             );
         }),
 });
