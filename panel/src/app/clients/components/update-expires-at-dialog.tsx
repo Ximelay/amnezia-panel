@@ -94,17 +94,28 @@ export function UpdateExpiresAtDialog({ id, expiresAt, isClient, trigger }: Prop
 
     const defaultTrigger = isClient ? (
         <Tooltip>
-            <TooltipTrigger asChild>
-                <Button className="cursor-pointer">Change date</Button>
-            </TooltipTrigger>
+            <DialogTrigger asChild>
+                <TooltipTrigger asChild>
+                    <Button className="cursor-pointer">Change date</Button>
+                </TooltipTrigger>
+            </DialogTrigger>
             <TooltipContent>
                 <p>Update date for client configs</p>
             </TooltipContent>
         </Tooltip>
     ) : (
-        <Button variant="ghost" size="sm" className="cursor-pointer">
-            <Edit className="h-4 w-4" />
-        </Button>
+        <Tooltip>
+            <DialogTrigger asChild>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="sm" className="cursor-pointer">
+                        <Edit className="h-4 w-4" />
+                    </Button>
+                </TooltipTrigger>
+            </DialogTrigger>
+            <TooltipContent>
+                <p>Update date for config</p>
+            </TooltipContent>
+        </Tooltip>
     );
 
     const setQuickDate = (monthsToAdd: number) => {
