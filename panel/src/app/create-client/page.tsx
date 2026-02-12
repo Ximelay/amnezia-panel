@@ -284,7 +284,7 @@ export default function CreateClientPage() {
                                 </Button>
                             </div>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="flex flex-col gap-5">
                             {fields.length === 0 ? (
                                 <div className="rounded-lg border-2 border-dashed py-8 text-center">
                                     <p className="text-muted-foreground">
@@ -638,6 +638,14 @@ export default function CreateClientPage() {
                                     })}
                                 </div>
                             )}
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={addConfig}
+                                className="flex cursor-pointer self-end">
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add Config
+                            </Button>
                         </CardContent>
                     </Card>
 
