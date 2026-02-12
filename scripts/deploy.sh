@@ -99,7 +99,7 @@ prompt_with_default() {
 
 add_cron_job() {
     local project_root="$1"
-    local backup_script_path="$project_root/scripts/backup-db.sh"
+    local backup_script_path="$project_root/scripts/backup-database.sh"
 
     local cron_command="0 0 */3 * * /bin/bash $backup_script_path"
     local temp_crontab=$(mktemp)
