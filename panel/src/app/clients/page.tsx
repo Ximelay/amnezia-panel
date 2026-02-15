@@ -165,6 +165,15 @@ export default function ClientsPage() {
                                         className="h-8">
                                         {protocolsMapping['AMNEZIAWG']}
                                     </Button>
+                                    <Button
+                                        variant={
+                                            protocolFilter === 'AMNEZIAWG2' ? 'default' : 'ghost'
+                                        }
+                                        size="sm"
+                                        onClick={() => setProtocolFilter('AMNEZIAWG2')}
+                                        className="h-8">
+                                        {protocolsMapping['AMNEZIAWG2']}
+                                    </Button>
                                 </div>
 
                                 <InputSearchLoader

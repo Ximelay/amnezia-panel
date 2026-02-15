@@ -52,6 +52,7 @@ model Logs {
 
 enum Protocols {
     AMNEZIAWG
+    AMNEZIAWG2
     XRAY
 }
 
