@@ -101,7 +101,7 @@ export const getProtocolColor = (protocol: Protocols) => {
     switch (protocol) {
         case 'AMNEZIAWG':
             return 'bg-red-100 text-red-800';
-        case 'AMNEZIAWG':
+        case 'AMNEZIAWG2':
             return 'bg-purple-100 text-purple-800';
         case 'XRAY':
             return 'bg-zinc-900 text-zinc-50';

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export type Protocol = 'amneziawg' | 'xray';
+export type Protocol = 'amneziawg' | 'amneziawg2' | 'xray';
 
 export interface IPeer {
     id: string;
@@ -47,7 +47,7 @@ export interface GetServerInfoResponse {
     weight: number;
     maxPeers: number;
     totalPeers: number;
-    protocols: [Protocol, Protocol];
+    protocols: Protocol[];
 }
 
 interface Clients {
@@ -63,14 +63,20 @@ interface Clients {
 export interface ServerBackup {
     generatedAt: Date;
     serverId: string;
-    protocols: [Protocol, Protocol];
-    amnezia: {
+    protocols: Protocol[];
+    amnezia?: {
         wgConfig: string;
         presharedKey: string;
         serverPublicKey: string;
         clients: Clients[];
     };
-    xray: {
+    amneziaWg2?: {
+        wgConfig: string;
+        presharedKey: string;
+        serverPublicKey: string;
+        clients: Clients[];
+    };
+    xray?: {
         serverConfig: string;
         uuid: string;
         publicKey: string;
@@ -155,8 +161,9 @@ export const serverBackupSchema = z.object({
     generatedAt: z.string(),
     serverId: z.string(),
     protocols: z.array(z.string()),
-    amnezia: amneziaSchema,
-    xray: xraySchema,
+    amnezia: amneziaSchema.optional(),
+    amneziaWg2: amneziaSchema.optional(),
+    xray: xraySchema.optional(),
 });
 
 export type ServerBackupZod = z.infer<typeof serverBackupSchema>;
