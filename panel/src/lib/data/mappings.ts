@@ -1,26 +1,26 @@
 import { Languages, LevelTypes, LogTypes, Protocols } from 'prisma/generated/enums';
 
 export const protocolsMapping: Record<Protocols, string> = {
-    [Protocols.AMNEZIAWG]: 'AmneziaWG',
     [Protocols.AMNEZIAWG2]: 'AmneziaWG 2.0',
+    [Protocols.AMNEZIAWG]: 'AmneziaWG',
     [Protocols.XRAY]: 'XRAY',
 };
 
 export const protocolsApiMapping: Record<Protocols, 'amneziawg' | 'amneziawg2' | 'xray'> = {
-    [Protocols.AMNEZIAWG]: 'amneziawg',
     [Protocols.AMNEZIAWG2]: 'amneziawg2',
+    [Protocols.AMNEZIAWG]: 'amneziawg',
     [Protocols.XRAY]: 'xray',
 };
 
 export const protocolsServerMapping: Record<string, string> = {
-    amneziawg: 'AmneziaWG',
     amneziawg2: 'AmneziaWG 2.0',
+    amneziawg: 'AmneziaWG',
     xray: 'XRAY',
 };
 
 export const apiProtocolsMapping: Record<'amneziawg' | 'amneziawg2' | 'xray', Protocols> = {
-    ['amneziawg']: Protocols.AMNEZIAWG,
     ['amneziawg2']: Protocols.AMNEZIAWG2,
+    ['amneziawg']: Protocols.AMNEZIAWG,
     ['xray']: Protocols.XRAY,
 };
 

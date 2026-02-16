@@ -398,9 +398,9 @@ export const clientsRouter = createTRPCRouter({
                     ? `For using <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> you need to download the open-source AmneziaVPN app.
 
 <b>💻 Computers & Laptops</b>
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_x64.exe">Windows</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_macos.zip">macOS</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_linux_x64.tar.zip">Linux</a>
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.12.9/AmneziaVPN_4.8.12.9_x64.exe">Windows</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.12.9/AmneziaVPN_4.8.12.9_macos.pkg">macOS</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.12.9/AmneziaVPN_4.8.12.9_linux_x64.tar">Linux</a>
 • <a href="https://docs.amnezia.org/documentation/installing-app-on-linux">Linux docs</a>
 
 <b>📱 Smartphones & Tablets</b>
@@ -409,9 +409,9 @@ export const clientsRouter = createTRPCRouter({
                     : `Для использования <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> вам нужно скачать open-source приложение AmneziaVPN.
 
 <b>💻 Компьютеры и ноутбуки</b>
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_x64.exe">Windows</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_macos.zip">macOS</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.11.4/AmneziaVPN_4.8.11.4_linux_x64.tar.zip">Linux</a>
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.12.9/AmneziaVPN_4.8.12.9_x64.exe">Windows</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.12.9/AmneziaVPN_4.8.12.9_macos.pkg">macOS</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.12.9/AmneziaVPN_4.8.12.9_linux_x64.tar">Linux</a>
 • <a href="https://docs.amnezia.org/documentation/installing-app-on-linux">Документация для Linux</a>
 
 <b>📱 Смартфоны и планшеты</b>

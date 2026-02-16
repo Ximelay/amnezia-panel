@@ -20,9 +20,23 @@ export default function ClientsPage() {
     const [search, setSearch] = useState('');
     const [protocolFilter, setProtocolFilter] = useState('All');
     const [serverFilter, setServerFilter] = useState<Option[]>([]);
+    const [defaultServerId, setDefaultServerId] = useState<string | null>(null);
     const router = useRouter();
 
     const { data: serversData, isLoading: isLoadingServers } = api.servers.getServers.useQuery();
+
+    useEffect(() => {
+        if (typeof window !== 'undefined' && serversData) {
+            const stored = localStorage.getItem('defaultServerId');
+            if (stored) {
+                const server = serversData.find((s) => s.id === Number(stored));
+                if (server) {
+                    setDefaultServerId(stored);
+                    setServerFilter([{ value: String(server.id), label: server.name }]);
+                }
+            }
+        }
+    }, [serversData]);
 
     const serverOptions = useMemo(() => {
         if (!serversData) return [];
@@ -38,12 +52,12 @@ export default function ClientsPage() {
 
     const { data, isLoading, isFetching, error } = api.clients.getClientsWithConfigs.useQuery(
         {
-            serverId: selectedServerId,
+            serverId: selectedServerId || defaultServerId || undefined,
             search,
             protocolFilter,
         },
         {
-            enabled: !!selectedServerId,
+            enabled: !!(selectedServerId || defaultServerId),
         }
     );
 

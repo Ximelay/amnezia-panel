@@ -104,7 +104,6 @@ export default function CreateClientPage() {
     });
 
     const onSubmit = (data: createClientFormData) => {
-        // Преобразуем 'none' в пустую строку для serverId
         const configsWithDefaultServer = data.configs.map((config) => ({
             ...config,
             serverId: config.serverId === 'none' ? '' : config.serverId,
@@ -114,7 +113,6 @@ export default function CreateClientPage() {
                     : config.clientName,
         }));
 
-        // Подставляем clientServerId, если в конфиге serverId пустой
         const finalConfigs = configsWithDefaultServer.map((config) => ({
             ...config,
             serverId: config.serverId || (clientServerId !== 'none' ? clientServerId : ''),
@@ -133,7 +131,7 @@ export default function CreateClientPage() {
             serverId: clientServerId !== 'none' ? clientServerId : 'none',
             clientName: '',
             expiresAt: '',
-            protocol: 'AMNEZIAWG' as const,
+            protocol: 'AMNEZIAWG2' as const,
         };
 
         append(newConfig);

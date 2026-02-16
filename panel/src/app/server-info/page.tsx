@@ -3,15 +3,29 @@
 import { api } from '@/trpc/react';
 import ServerInfo from './components/server-info';
 import ServerActions from './components/server-actions';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import MultipleSelector, { type Option } from '@/components/ui/multi-select';
 import { Loader } from '@/components/loader';
 import { Button } from '@/components/ui/button';
 
 export default function ServerPage() {
     const [selectedServer, setSelectedServer] = useState<Option[]>();
+    const [defaultServerId, setDefaultServerId] = useState<string | null>(null);
 
     const { data: serversData, isLoading: isLoadingServers } = api.servers.getServers.useQuery();
+
+    useEffect(() => {
+        if (typeof window !== 'undefined' && serversData) {
+            const stored = localStorage.getItem('defaultServerId');
+            if (stored) {
+                const server = serversData.find((s) => s.id === Number(stored));
+                if (server) {
+                    setDefaultServerId(stored);
+                    setSelectedServer([{ value: String(server.id), label: server.name }]);
+                }
+            }
+        }
+    }, [serversData]);
 
     const serverOptions = useMemo(() => {
         if (!serversData) return [];
@@ -26,8 +40,8 @@ export default function ServerPage() {
     }, [selectedServer]);
 
     const { data: serverInfo, isLoading: isLoadingServerInfo } = api.servers.getServerInfo.useQuery(
-        { serverId: Number(selectedServerId) },
-        { enabled: !!selectedServerId }
+        { serverId: Number(selectedServerId) || Number(defaultServerId) },
+        { enabled: !!selectedServerId || !!defaultServerId }
     );
 
     const {
