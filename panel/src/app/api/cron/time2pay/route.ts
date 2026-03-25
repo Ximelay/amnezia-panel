@@ -51,8 +51,6 @@ export async function POST(req: NextRequest) {
     GROUP BY c.id, c.name, c."telegramId", c.language
 `;
 
-        console.log(foundClients);
-
         if (!foundClients || foundClients.length === 0)
             return NextResponse.json('Clients not found', { status: 200 });
 
@@ -76,8 +74,6 @@ export async function POST(req: NextRequest) {
 С вас ${calculatedTotalPrice()}₽ за ${client.configsCount} устройств`
                         : `🕘 Time to <a href="${foundPaymentSettings.paymentLink}">pay</a> for VPN.
 It's ${calculatedTotalPrice()}₽ for ${client.configsCount} devices`;
-
-                console.log('Message text:', message);
 
                 await telegramService.sendMessage(
                     {
