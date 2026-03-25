@@ -15,7 +15,6 @@ interface TelegramConfig {
 
 interface Translations {
     header: string;
-    partOf: string;
     configFor: string;
     protocol: string;
     expirationDate: string;
@@ -27,7 +26,6 @@ interface Translations {
 const translations: Record<Languages, Translations> = {
     ENGLISH: {
         header: 'VPN configurations from',
-        partOf: 'Part',
         configFor: 'Configuration for',
         protocol: 'Protocol',
         expirationDate: 'Expiration date',
@@ -37,7 +35,6 @@ const translations: Record<Languages, Translations> = {
     },
     RUSSIAN: {
         header: 'VPN ключи от',
-        partOf: 'Часть',
         configFor: 'Ключ для',
         protocol: 'Протокол',
         expirationDate: 'Дата истечения',
@@ -50,8 +47,6 @@ const translations: Record<Languages, Translations> = {
 interface FormatConfigsOptions {
     showHeader: boolean;
     showFooter: boolean;
-    currentGroup: number;
-    totalGroups: number;
     totalConfigs: number;
     language: Languages;
 }
@@ -61,7 +56,7 @@ function formatConfigsMessage(
     clientName: string,
     options: FormatConfigsOptions
 ): string {
-    const { showHeader, showFooter, currentGroup, totalGroups, totalConfigs, language } = options;
+    const { showHeader, showFooter, totalConfigs, language } = options;
 
     const t = translations[language];
 
@@ -69,10 +64,6 @@ function formatConfigsMessage(
 
     if (showHeader) {
         message += `🔐 <b>${t.header} ${process.env.NEXT_PUBLIC_VPN_NAME}</b>\n\n`;
-    }
-
-    if (totalGroups > 1) {
-        message += `📦 ${t.partOf} ${currentGroup} ${language === 'RUSSIAN' ? 'из' : 'of'} ${totalGroups}\n\n`;
     }
 
     const configMessages = configs.map((config, index) => {
@@ -129,8 +120,6 @@ export async function sendConfigsToTelegram(
         const message = formatConfigsMessage(currentGroup, clientName, {
             showHeader: isFirstGroup,
             showFooter: isLastGroup,
-            currentGroup: i + 1,
-            totalGroups: configGroups.length,
             totalConfigs: configs.length,
             language,
         });
@@ -154,8 +143,6 @@ export async function sendConfigsToTelegram(
                         showHeader: isFirstGroup && currentGroup.indexOf(config) === 0,
                         showFooter:
                             isLastGroup && currentGroup.indexOf(config) === currentGroup.length - 1,
-                        currentGroup: i + 1,
-                        totalGroups: configGroups.length,
                         totalConfigs: configs.length,
                         language,
                     });

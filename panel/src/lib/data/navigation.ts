@@ -38,6 +38,10 @@ export const navigation: Navigation = {
                     url: '/logs',
                 },
                 {
+                    title: 'Payment settings',
+                    url: '/payment-settings',
+                },
+                {
                     title: 'Notification',
                     url: '/notification',
                 },

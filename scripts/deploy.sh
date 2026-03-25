@@ -97,11 +97,14 @@ prompt_with_default() {
     exec 3>&-
 }
 
-add_cron_job() {
+add_cron_jobs() {
     local project_root="$1"
-    local backup_script_path="$project_root/scripts/backup-database.sh"
+    local backup_db_path="$project_root/scripts/backup-database.sh"
+    local time2pay_path="$project_root/scripts/time2pay.sh"
 
-    local cron_command="0 0 */3 * * /bin/bash $backup_script_path"
+    local cron_backup="0 0 */3 * * /bin/bash $backup_db_path"
+    local cron_time2pay="30 10 * * * /bin/bash $time2pay_path"
+
     local temp_crontab=$(mktemp)
 
     if ! command -v crontab -l >/dev/null 2>&1; then
@@ -109,22 +112,29 @@ add_cron_job() {
         apt install cron -y
     fi
 
-    print_message "Setting up cron job for automatic database backup..."
+    print_message "Setting up cron jobs..."
 
     crontab -l 2>/dev/null > "$temp_crontab" || true
 
-    if grep -qF "$backup_script_path" "$temp_crontab"; then
-        print_message "Cron job already exists"
+    if grep -qF "$backup_db_path" "$temp_crontab"; then
+        print_message "Cron job for backup already exists"
     else
-        echo "$cron_command" >> "$temp_crontab"
-        crontab "$temp_crontab"
+        echo "$cron_backup" >> "$temp_crontab"
         print_message "Cron job added: Database backup every 3 days at midnight"
     fi
 
+    if grep -qF "$time2pay_path" "$temp_crontab"; then
+        print_message "Cron job for time2pay already exists"
+    else
+        echo "$cron_time2pay" >> "$temp_crontab"
+        print_message "Cron job added: time2pay daily at 10:30"
+    fi
+
+    crontab "$temp_crontab"
     rm -f "$temp_crontab"
 
     print_message "Current cron jobs:"
-    crontab -l 2>/dev/null | grep -E "(backup|$project_root)" || echo "  (no backup-related cron jobs found)"
+    crontab -l 2>/dev/null | grep -E "(backup|time2pay|$project_root)" || echo "  (no relevant cron jobs found)"
 }
 
 install_nodejs() {
@@ -338,7 +348,7 @@ EOF
 
     cd "$original_dir"
 
-    add_cron_job "$PROJECT_ROOT"
+    add_cron_jobs "$PROJECT_ROOT"
 
     cd "$PANEL_DIR"
 

@@ -50,6 +50,16 @@ model Logs {
     message   String
 }
 
+model PaymentSettings {
+    id                  Int      @id @default(autoincrement())
+    createdAt           DateTime @default(now())
+    updatedAt           DateTime @updatedAt
+    defaultPrice        Float
+    additionalPrice     Float
+    defaultConfigsCount Int
+    paymentLink         String
+}
+
 enum Protocols {
     AMNEZIAWG
     AMNEZIAWG2

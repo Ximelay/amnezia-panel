@@ -255,6 +255,24 @@ function ClientRow({
         }
     };
 
+    const isTelegramEnabled = process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true';
+
+    const { data: paymentSettings } = api.paymentSettings.getPaymentSettings.useQuery(undefined, {
+        enabled: isTelegramEnabled,
+    });
+
+    const calculatedTotalPrice = useMemo(() => {
+        if (!paymentSettings) return;
+
+        const configsCount = Number(client.configsCount);
+        if (configsCount <= paymentSettings.defaultConfigsCount) {
+            return paymentSettings.defaultPrice;
+        }
+
+        const extraCount = configsCount - paymentSettings.defaultConfigsCount;
+        return paymentSettings.defaultPrice + extraCount * paymentSettings.additionalPrice;
+    }, [client, paymentSettings]);
+
     return (
         <>
             <TableRow>
@@ -285,7 +303,10 @@ function ClientRow({
                             disabled={client.configsCount === 0}
                             className="flex items-center gap-2 hover:bg-transparent">
                             <UserIcon className="h-4 w-4" />
-                            {client.name}
+                            <div className="grid">
+                                {client.name}
+                                {paymentSettings && <span className='text-red-500 text-left'>{calculatedTotalPrice}₽</span>}
+                            </div>
                         </Button>
 
                         {client.telegramId && (
