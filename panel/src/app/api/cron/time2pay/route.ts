@@ -55,9 +55,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json('Clients not found', { status: 200 });
 
         for (const client of foundClients) {
+            const clientConfigsCount = Number(client.configsCount)
+
             if (client.telegramId) {
                 const calculatedTotalPrice = (): number => {
-                    const configsCount = Number(client.configsCount);
+                    const configsCount = clientConfigsCount;
                     if (configsCount <= foundPaymentSettings.defaultConfigsCount) {
                         return foundPaymentSettings.defaultPrice;
                     }
@@ -68,10 +70,24 @@ export async function POST(req: NextRequest) {
                     );
                 };
 
+                const devicesWord = () => {
+                    if (clientConfigsCount < 10 || clientConfigsCount > 20) {
+                        if (clientConfigsCount % 10 === 1) {
+                            return 'устройство';
+                        } else if (clientConfigsCount % 10 > 1 && clientConfigsCount % 10 < 5) {
+                            return 'устройства';
+                        } else {
+                            return 'устройств';
+                        }
+                    } else {
+                        return 'устройств';
+                    }
+                };
+
                 const message =
                     client.language === Languages.RUSSIAN
                         ? `🕘 Время <a href="${foundPaymentSettings.paymentLink}">платить</a> за VPN.
-С вас ${calculatedTotalPrice()}₽ за ${client.configsCount} устройств`
+С вас ${calculatedTotalPrice()}₽ за ${client.configsCount} ${devicesWord()}`
                         : `🕘 Time to <a href="${foundPaymentSettings.paymentLink}">pay</a> for VPN.
 It's ${calculatedTotalPrice()}₽ for ${client.configsCount} devices`;
 
