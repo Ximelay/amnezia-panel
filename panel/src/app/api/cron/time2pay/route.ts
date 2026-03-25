@@ -27,29 +27,29 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'PaymentSettings not found' }, { status: 400 });
 
         const now = new Date();
+        const startOfToday = new Date(
+            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0)
+        );
         const startOfTomorrow = new Date(
             Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0)
         );
-        const endOfTomorrow = new Date(
-            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2, 0, 0, 0)
-        );
 
-        const startTimestamp = Math.floor(startOfTomorrow.getTime() / 1000);
-        const endTimestamp = Math.floor(endOfTomorrow.getTime() / 1000);
+        const startTimestamp = Math.floor(startOfToday.getTime() / 1000);
+        const endTimestamp = Math.floor(startOfTomorrow.getTime() / 1000);
 
         const foundClients: ClientWithExpiringCount[] = await db.$queryRaw`
-    SELECT 
-        c.name, 
-        c."telegramId", 
-        c.language,
-        COUNT(conf.id) AS "configsCount"
-    FROM "Clients" c
-    INNER JOIN "Configs" conf ON conf."clientId" = c.id
-    WHERE conf."expiresAt" IS NOT NULL
-        AND conf."expiresAt"::bigint >= ${startTimestamp}
-        AND conf."expiresAt"::bigint < ${endTimestamp}
-    GROUP BY c.id, c.name, c."telegramId", c.language
-`;
+            SELECT 
+                c.name, 
+                c."telegramId", 
+                c.language,
+                COUNT(conf.id) AS "configsCount"
+            FROM "Clients" c
+            INNER JOIN "Configs" conf ON conf."clientId" = c.id
+            WHERE conf."expiresAt" IS NOT NULL
+                AND conf."expiresAt"::bigint >= ${startTimestamp}
+                AND conf."expiresAt"::bigint < ${endTimestamp}
+            GROUP BY c.id, c.name, c."telegramId", c.language
+        `;
 
         if (!foundClients || foundClients.length === 0)
             return NextResponse.json('Clients not found', { status: 200 });
