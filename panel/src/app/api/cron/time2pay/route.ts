@@ -3,6 +3,8 @@ import { logsService } from '@/server/services/logs';
 import { telegramService } from '@/server/services/telegram/telegram';
 import { type NextRequest, NextResponse } from 'next/server';
 import { Languages } from 'prisma/generated/enums';
+import { startOfDay, addDays } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
 type ClientWithExpiringCount = {
     name: string;
@@ -26,16 +28,19 @@ export async function POST(req: NextRequest) {
         if (!foundPaymentSettings)
             return NextResponse.json({ error: 'PaymentSettings not found' }, { status: 400 });
 
+        const timeZone = 'Europe/Moscow'; // Change time zone if u need
         const now = new Date();
-        const startOfToday = new Date(
-            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0)
-        );
-        const startOfTomorrow = new Date(
-            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0)
-        );
 
-        const startTimestamp = Math.floor(startOfToday.getTime() / 1000);
-        const endTimestamp = Math.floor(startOfTomorrow.getTime() / 1000);
+        const mskNow = toZonedTime(now, timeZone);
+
+        const startOfTodayMSK = startOfDay(mskNow);
+        const startOfTomorrowMSK = startOfDay(addDays(mskNow, 1));
+
+        const startUTC = fromZonedTime(startOfTodayMSK, timeZone);
+        const endUTC = fromZonedTime(startOfTomorrowMSK, timeZone);
+
+        const startTimestamp = Math.floor(startUTC.getTime() / 1000);
+        const endTimestamp = Math.floor(endUTC.getTime() / 1000);
 
         const foundClients: ClientWithExpiringCount[] = await db.$queryRaw`
             SELECT 
@@ -55,7 +60,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json('Clients not found', { status: 200 });
 
         for (const client of foundClients) {
-            const clientConfigsCount = Number(client.configsCount)
+            const clientConfigsCount = Number(client.configsCount);
 
             if (client.telegramId) {
                 const calculatedTotalPrice = (): number => {

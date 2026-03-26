@@ -58,6 +58,7 @@ model PaymentSettings {
     additionalPrice     Float
     defaultConfigsCount Int
     paymentLink         String
+    adminTelegramIds    Json?    // String[]
 }
 
 enum Protocols {

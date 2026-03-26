@@ -7,6 +7,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+APP_HOST=$(hostname -I | awk '{print $1}')
+
 print_message() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
@@ -356,7 +358,7 @@ EOF
     print_message "Deployment completed successfully!"
     echo ""
     print_message "Application is available at:"
-    print_message "  https://${AMNEZIA_API_HOST}:8443"
+    print_message "  https://${APP_HOST}:8443"
     echo ""
     print_message "Containers running:"
     docker compose ps

@@ -1,3 +1,4 @@
+// app/(dashboard)/payment-settings/page.tsx
 'use client';
 
 import { useEffect } from 'react';
@@ -15,6 +16,7 @@ import {
     FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea'; // import Textarea
 import {
     Card,
     CardAction,
@@ -98,16 +100,24 @@ export default function PaymentSettingsPage() {
             additionalPrice: '0',
             defaultConfigsCount: '3',
             paymentLink: '',
+            adminTelegramIds: '',
         },
     });
 
     useEffect(() => {
         if (settings) {
+            // Convert JSON array of admin IDs to a comma-separated string for the form
+            let adminIdsString = '';
+            if (settings.adminTelegramIds && Array.isArray(settings.adminTelegramIds)) {
+                adminIdsString = settings.adminTelegramIds.join(', ');
+            }
+
             form.reset({
                 defaultPrice: String(settings.defaultPrice),
                 additionalPrice: String(settings.additionalPrice),
                 defaultConfigsCount: String(settings.defaultConfigsCount),
                 paymentLink: settings.paymentLink,
+                adminTelegramIds: adminIdsString,
             });
         }
     }, [settings, form]);
@@ -148,7 +158,8 @@ export default function PaymentSettingsPage() {
             <div className="mb-8">
                 <h1 className="text-3xl font-bold tracking-tight">Payment Settings</h1>
                 <p className="text-muted-foreground mt-2">
-                    Configure default pricing, additional price per configuration, and payment link
+                    Configure default pricing, additional price per configuration, payment link, and
+                    admin Telegram IDs
                 </p>
             </div>
 
@@ -245,6 +256,28 @@ export default function PaymentSettingsPage() {
                                             />
                                         </FormControl>
                                         <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="adminTelegramIds"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Admin Telegram IDs</FormLabel>
+                                        <FormControl>
+                                            <Textarea
+                                                placeholder="Enter admin Telegram IDs separated by commas, e.g. 123456789, 987654321"
+                                                rows={3}
+                                                {...field}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                        <div className="text-muted-foreground text-sm">
+                                            These users will receive notifications or have special
+                                            access.
+                                        </div>
                                     </FormItem>
                                 )}
                             />
