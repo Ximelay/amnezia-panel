@@ -135,7 +135,7 @@ It's ${calculatedTotalPrice()}₽ for ${client.configsCount} devices`;
 
             clientSummaries.forEach((c, idx) => {
                 const deviceText = c.configsCount === 1 ? 'device' : 'devices';
-                adminMessage += `${idx + 1}. ${c.name} — ${c.configsCount} ${deviceText} — ${c.totalPrice}₽\n`;
+                adminMessage += `${idx + 1}. ${c.name} for ${c.configsCount} ${deviceText} — ${c.totalPrice}₽\n`;
             });
 
             adminMessage += `\n<b>💰 Total expected revenue:</b> ${totalRevenue}₽`;
