@@ -28,19 +28,15 @@ export async function POST(req: NextRequest) {
         if (!foundPaymentSettings)
             return NextResponse.json({ error: 'PaymentSettings not found' }, { status: 400 });
 
-        const timeZone = 'Europe/Moscow'; // Change time zone if u need
+        const MSK_OFFSET = 3 * 60 * 60 * 1000;
         const now = new Date();
-
-        const mskNow = toZonedTime(now, timeZone);
-
-        const startOfTodayMSK = startOfDay(mskNow);
-        const startOfTomorrowMSK = startOfDay(addDays(mskNow, 1));
-
-        const startUTC = fromZonedTime(startOfTodayMSK, timeZone);
-        const endUTC = fromZonedTime(startOfTomorrowMSK, timeZone);
-
-        const startTimestamp = Math.floor(startUTC.getTime() / 1000);
-        const endTimestamp = Math.floor(endUTC.getTime() / 1000);
+        const nowMSK = new Date(now.getTime() + MSK_OFFSET);
+        const startOfTodayMSK = new Date(
+            Date.UTC(nowMSK.getUTCFullYear(), nowMSK.getUTCMonth(), nowMSK.getUTCDate())
+        );
+        const startOfTomorrowMSK = new Date(startOfTodayMSK.getTime() + 24 * 60 * 60 * 1000);
+        const startTimestamp = Math.floor(startOfTodayMSK.getTime() / 1000);
+        const endTimestamp = Math.floor(startOfTomorrowMSK.getTime() / 1000);
 
         const foundClients: ClientWithExpiringCount[] = await db.$queryRaw`
             SELECT 
