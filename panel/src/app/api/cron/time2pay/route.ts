@@ -3,8 +3,6 @@ import { logsService } from '@/server/services/logs';
 import { telegramService } from '@/server/services/telegram/telegram';
 import { type NextRequest, NextResponse } from 'next/server';
 import { Languages } from 'prisma/generated/enums';
-import { startOfDay, addDays } from 'date-fns';
-import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
 type ClientWithExpiringCount = {
     name: string;
@@ -28,7 +26,7 @@ export async function POST(req: NextRequest) {
         if (!foundPaymentSettings)
             return NextResponse.json({ error: 'PaymentSettings not found' }, { status: 400 });
 
-        const MSK_OFFSET = 3 * 60 * 60 * 1000;
+        const MSK_OFFSET = 3 * 60 * 60 * 1000; // Change time zone if u need
         const now = new Date();
         const nowMSK = new Date(now.getTime() + MSK_OFFSET);
         const startOfTodayMSK = new Date(
@@ -54,6 +52,8 @@ export async function POST(req: NextRequest) {
 
         if (!foundClients || foundClients.length === 0)
             return NextResponse.json('Clients not found', { status: 200 });
+
+        const clientSummaries: { name: string; configsCount: number; totalPrice: number }[] = [];
 
         for (const client of foundClients) {
             const clientConfigsCount = Number(client.configsCount);
@@ -106,12 +106,53 @@ It's ${calculatedTotalPrice()}₽ for ${client.configsCount} devices`;
                     'INFO',
                     `${client.name} was notified about payment successfully`
                 );
+
+                clientSummaries.push({
+                    name: client.name,
+                    configsCount: clientConfigsCount,
+                    totalPrice: calculatedTotalPrice(),
+                });
             } else {
                 await logsService.createLog(
                     'TELEGRAM',
                     'WARNING',
                     `${client.name} was not notified about payment cause without telegramId`
                 );
+            }
+        }
+
+        if (
+            foundPaymentSettings.adminTelegramIds &&
+            Array.isArray(foundPaymentSettings.adminTelegramIds) &&
+            foundPaymentSettings.adminTelegramIds.length > 0 &&
+            clientSummaries.length > 0
+        ) {
+            const todayDate = startOfTodayMSK.toLocaleDateString('en-US');
+            const totalRevenue = clientSummaries.reduce((sum, c) => sum + c.totalPrice, 0);
+
+            let adminMessage = `<b>📊 Payment Reminder Summary for ${todayDate}</b>\n\n`;
+            adminMessage += `<b>Clients with expiring configurations (total: ${clientSummaries.length}):</b>\n`;
+
+            clientSummaries.forEach((c, idx) => {
+                const deviceText = c.configsCount === 1 ? 'device' : 'devices';
+                adminMessage += `${idx + 1}. ${c.name} — ${c.configsCount} ${deviceText} — ${c.totalPrice}₽\n`;
+            });
+
+            adminMessage += `\n<b>💰 Total expected revenue:</b> ${totalRevenue}₽`;
+
+            for (const adminId of foundPaymentSettings.adminTelegramIds as string[]) {
+                try {
+                    await telegramService.sendMessage(
+                        { chatId: adminId, text: adminMessage, parseMode: 'HTML' },
+                        `Admin ${adminId}`
+                    );
+                } catch (err) {
+                    await logsService.createLog(
+                        'TELEGRAM',
+                        'ERROR',
+                        `Failed to send admin notification to ${adminId}: ${err}`
+                    );
+                }
             }
         }
 
