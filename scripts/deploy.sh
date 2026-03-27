@@ -139,6 +139,65 @@ add_cron_jobs() {
     crontab -l 2>/dev/null | grep -E "(backup|time2pay|$project_root)" || echo "  (no relevant cron jobs found)"
 }
 
+setup_autostart() {
+    local panel_dir="$1"
+    local service_name="amnezia-panel"
+    local service_file="/etc/systemd/system/${service_name}.service"
+
+    if ! command -v systemctl >/dev/null 2>&1; then
+        print_warning "systemd not found, cannot set up autostart."
+        return 1
+    fi
+
+    if [ "$EUID" -ne 0 ]; then
+        print_warning "Not running as root, cannot set up autostart. Please run with sudo."
+        return 1
+    fi
+
+    local docker_cmd
+    docker_cmd=$(command -v docker)
+    if [ -z "$docker_cmd" ]; then
+        print_error "docker command not found, cannot set up autostart."
+        return 1
+    fi
+
+    print_message "Creating systemd service for autostart..."
+
+    cat > "$service_file" << EOF
+[Unit]
+Description=AmneziaVPN Panel
+After=docker.service
+Requires=docker.service
+Wants=network.target
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=${panel_dir}
+ExecStart=${docker_cmd} compose --env-file .env up -d
+ExecStop=${docker_cmd} compose down
+User=root
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable "${service_name}.service"
+
+    if ! systemctl is-active --quiet "${service_name}.service"; then
+        systemctl start "${service_name}.service"
+        print_message "Service started."
+    else
+        print_message "Service already running."
+    fi
+
+    print_message "Autostart enabled: $service_name"
+}
+
 install_nodejs() {
     if ! command -v node >/dev/null 2>&1; then
         if ! command -v curl >/dev/null 2>&1; then
@@ -351,6 +410,8 @@ EOF
     cd "$original_dir"
 
     add_cron_jobs "$PROJECT_ROOT"
+
+    setup_autostart "$PANEL_DIR"
 
     cd "$PANEL_DIR"
 

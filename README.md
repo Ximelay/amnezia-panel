@@ -45,16 +45,33 @@ bash scripts/deploy.sh
 
 Protect port 8443 properly with a firewall or reverse proxy (nginx).
 
-## Encryption 
+## Encryption
 
 Client VPN configurations are **encrypted at rest** in the database using the **AES-256-GCM** algorithm. This industry-standard encryption ensures that sensitive client data remains secure, even in the event of unauthorized database access.
 
 ENCRYPTION_KEY is created by the command:
+
 ```bash
 openssl rand -base64 32
 ```
 
 **Note:** Save the encryption key.
+
+## Optional Features
+
+### Telegram Bot Integration
+
+If you provide a **Telegram Bot Token** during deployment, the panel will unlock additional functionality:
+
+- **Admin Notifications** – Send notifications to admins when users make a payment for the VPN.
+
+- **User Notifications** – Send clients their VPN configuration and download instructions directly via Telegram.
+
+- **Payment Notifications** – If a client's configuration expires tomorrow, they will be notified.
+
+To use these features, simply provide your bot token in the `.env` file (`TELEGRAM_BOT_TOKEN`) and set `NEXT_PUBLIC_USES_TELEGRAM_BOT=true` (this is done automatically by the deployment script if a token is supplied).
+
+> **Note:** The bot token is optional – the panel works perfectly without it, but you will lose the notification and payment capabilities.
 
 ## Project Architecture
 
