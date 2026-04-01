@@ -514,13 +514,21 @@ export const clientsRouter = createTRPCRouter({
 
             const foundClient = await ctx.db.clients.findUnique({
                 where: { id: Number(id) },
-                select: { name: true, Configs: { select: { id: true, serverId: true } } },
+                select: {
+                    name: true,
+                    Configs: { select: { id: true, serverId: true, protocol: true } },
+                },
             });
             if (!foundClient)
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
 
             for (const config of foundClient.Configs)
-                await amneziaApiService.updateConfig(config.serverId, config.id, expiresAt);
+                await amneziaApiService.updateConfig(
+                    config.serverId,
+                    config.id,
+                    protocolsApiMapping[config.protocol],
+                    expiresAt
+                );
 
             await ctx.db.configs.updateMany({
                 where: { clientId: Number(id) },
@@ -541,13 +549,22 @@ export const clientsRouter = createTRPCRouter({
 
             const foundClient = await ctx.db.clients.findUnique({
                 where: { id: clientId },
-                select: { name: true, Configs: { select: { id: true, serverId: true } } },
+                select: {
+                    name: true,
+                    Configs: { select: { id: true, serverId: true, protocol: true } },
+                },
             });
             if (!foundClient)
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
 
             for (const config of foundClient.Configs)
-                await amneziaApiService.updateConfig(config.serverId, config.id, undefined, status);
+                await amneziaApiService.updateConfig(
+                    config.serverId,
+                    config.id,
+                    protocolsApiMapping[config.protocol],
+                    undefined,
+                    status
+                );
 
             await ctx.db.clients.update({
                 where: { id: clientId },

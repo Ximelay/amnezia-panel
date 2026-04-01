@@ -169,12 +169,17 @@ Expiration date: <b>${expiryDate}</b>
 
             const foundConfig = await ctx.db.configs.findUnique({
                 where: { id },
-                select: { serverId: true, clientName: true },
+                select: { serverId: true, clientName: true, protocol: true },
             });
             if (!foundConfig)
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'Config not found' });
 
-            await amneziaApiService.updateConfig(foundConfig.serverId, id, expiresAt);
+            await amneziaApiService.updateConfig(
+                foundConfig.serverId,
+                id,
+                protocolsApiMapping[foundConfig.protocol],
+                expiresAt
+            );
 
             if (foundConfig) {
                 await ctx.db.configs.update({
@@ -197,12 +202,18 @@ Expiration date: <b>${expiryDate}</b>
 
             const foundConfig = await ctx.db.configs.findUnique({
                 where: { id },
-                select: { serverId: true, clientName: true },
+                select: { serverId: true, clientName: true, protocol: true },
             });
             if (!foundConfig)
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'Config not found' });
 
-            await amneziaApiService.updateConfig(foundConfig.serverId, id, undefined, status);
+            await amneziaApiService.updateConfig(
+                foundConfig.serverId,
+                id,
+                protocolsApiMapping[foundConfig.protocol],
+                undefined,
+                status
+            );
 
             if (foundConfig) {
                 await ctx.db.configs.update({

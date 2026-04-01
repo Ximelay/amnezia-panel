@@ -264,9 +264,9 @@ class AmneziaApiService {
     async updateConfig(
         serverId: number,
         clientId: string, // configId
+        protocol: Protocol,
         expiresAt?: string,
         status?: string,
-        protocol?: Protocol
     ): Promise<MessageResponse> {
         try {
             return await this.makeRequestWithRetry<MessageResponse>(serverId, 'clients', 'PATCH', {
