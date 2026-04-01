@@ -1,12 +1,8 @@
 FROM node:24-alpine AS builder
 
-ARG SKIP_ENV_VALIDATION=1
-
 WORKDIR /app
 
 COPY package.json yarn.lock ./
-
-ENV SKIP_ENV_VALIDATION=$SKIP_ENV_VALIDATION
 
 RUN yarn install --frozen-lockfile --ignore-scripts; \
     yarn next telemetry disable;
