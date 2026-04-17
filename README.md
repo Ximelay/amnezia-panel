@@ -98,7 +98,9 @@ amnezia-panel/
 │   ├── .env.example           # Configuration template
 │   └── package.json           # Dependencies and scripts
 ├── scripts/
-│   ├── backup-db.sh           # Database backup automation
+│   ├── backup-database.sh     # Database backup automation
+│   └── backup-amnezia.sh      # Configurations backup automation, not tested
+│   └── time2pay.sh            # Script for payment notifications to Telegram
 │   └── deploy.sh              # Production deployment script
 └── LICENSE
 └── README.md                  # This documentation
