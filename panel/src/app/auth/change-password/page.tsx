@@ -20,6 +20,7 @@ import {
 import { Loader2 } from 'lucide-react';
 import { useUserData } from '@/hooks/user/use-user-data';
 import { InputPassword } from '@/components/input-password';
+import { useRouter } from 'next/navigation';
 
 const changePasswordSchema = z
     .object({
@@ -42,15 +43,14 @@ type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
 export default function ChangePasswordPage() {
     const { data: session } = useSession();
     const { clearUserCache } = useUserData();
+    const router = useRouter();
 
     const changePasswordMutation = api.admins.changePassword.useMutation({
         onSuccess: async () => {
             toast.success('Password was changed successfully');
             clearUserCache();
-            await signOut({
-                redirect: true,
-                callbackUrl: '/auth/login',
-            });
+            await signOut({ redirect: false });
+            router.push('/auth/login');
         },
         onError: (error) => {
             if (error.message === 'Password invalid') {

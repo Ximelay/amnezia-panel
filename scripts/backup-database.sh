@@ -34,10 +34,12 @@ fi
 
 chmod 400 "$BACKUP_FILE"
 echo "Backup created: $BACKUP_FILE"
+echo
 
 BACKUP_COUNT=$(ls -1 ${BACKUP_DIR}/backup-*.sql 2>/dev/null | wc -l)
 if [ "${BACKUP_COUNT}" -gt 3 ]; then
     NUM_TO_DELETE=$((${BACKUP_COUNT} - 3))
     ls -1 ${BACKUP_DIR}/backup-*.sql | sort | head -n ${NUM_TO_DELETE} | xargs -r rm --
     echo "Removed $NUM_TO_DELETE old backup(s)"
+    echo
 fi

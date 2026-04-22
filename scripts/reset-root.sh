@@ -16,5 +16,6 @@ fi
 
 MACHINE_IP=$(hostname -I | awk '{print $1}')
 
-curl -X POST "https://$MACHINE_IP/api/auth/reset-root" -H "Authorization: Bearer $ROOT_SECRET" \
+curl -X POST "https://$MACHINE_IP:8443/api/auth/reset-root" -H "Authorization: Bearer $ROOT_SECRET" \
     --insecure # delete if will be not selfsigned cert
+echo

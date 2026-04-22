@@ -18,3 +18,4 @@ MACHINE_IP=$(hostname -I | awk '{print $1}')
 
 curl -X POST "https://$MACHINE_IP:8443/api/cron/time2pay" -H "Authorization: Bearer $CRON_SECRET" \
     --insecure # delete if will be not selfsigned cert
+echo

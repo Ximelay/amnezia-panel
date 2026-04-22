@@ -71,3 +71,4 @@ else
 fi
 
 echo "Backup process completed successfully."
+echo

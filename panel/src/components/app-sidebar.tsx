@@ -39,10 +39,8 @@ export function AppSidebar({ navigation }: Readonly<Navbar>) {
 
     const handleLogout = async () => {
         clearUserCache();
-        await signOut({
-            redirect: true,
-            callbackUrl: '/auth/login',
-        });
+        await signOut({ redirect: false });
+        router.push('/auth/login');
     };
 
     return (
@@ -98,7 +96,7 @@ export function AppSidebar({ navigation }: Readonly<Navbar>) {
                                                     {user.login}
                                                 </span>
                                                 <span className="text-muted-foreground w-full truncate text-left text-xs">
-                                                    {rolesMapping[user.role]}
+                                                    {user.role && rolesMapping[user.role]}
                                                 </span>
                                             </div>
                                         </div>

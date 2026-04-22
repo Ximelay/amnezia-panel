@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
 import bcrypt from 'bcryptjs';
+import { logsService } from '@/server/services/logs';
 
 export async function POST(req: NextRequest) {
     const authHeader = req.headers.get('Authorization');
@@ -28,6 +29,8 @@ export async function POST(req: NextRequest) {
                 isFirstLogin: true,
             },
         });
+
+        await logsService.createLog('ADMIN', 'WARNING', 'Root was reseted');
 
         return NextResponse.json({
             success: true,

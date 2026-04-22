@@ -1,19 +1,9 @@
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { api } from '@/trpc/react';
 import { useUserCache } from './use-user-cache';
 
 export const useUserData = () => {
     const { data: session, status: sessionStatus } = useSession();
-    const {
-        data: userData,
-        refetch,
-        isLoading: queryLoading,
-    } = api.admins.getCurrentUser.useQuery(undefined, {
-        enabled: false,
-        retry: false,
-    });
-
     const {
         cachedUser,
         getCachedUserData,
@@ -23,9 +13,14 @@ export const useUserData = () => {
         setIsLoading,
     } = useUserCache();
 
+    const userData = {
+        login: session?.user.login,
+        role: session?.user.role,
+    };
+
     useEffect(() => {
         const loadUserData = async () => {
-            if (sessionStatus !== 'authenticated' || !session?.user) {
+            if (sessionStatus !== 'authenticated' || !userData) {
                 clearCachedUserData();
                 setIsLoading(false);
                 return;
@@ -38,17 +33,11 @@ export const useUserData = () => {
                 return;
             }
 
-            try {
-                const result = await refetch();
-
-                if (result.data) {
-                    setCachedUserData(result.data);
-                } else {
-                    clearCachedUserData();
-                }
-            } catch (error) {
+            if (userData) {
+                setCachedUserData(userData);
+                setIsLoading(false);
+            } else {
                 clearCachedUserData();
-            } finally {
                 setIsLoading(false);
             }
         };
@@ -60,7 +49,6 @@ export const useUserData = () => {
         getCachedUserData,
         setCachedUserData,
         clearCachedUserData,
-        refetch,
         setIsLoading,
     ]);
 
@@ -70,7 +58,7 @@ export const useUserData = () => {
         }
     }, [sessionStatus, clearCachedUserData]);
 
-    const isLoading = cacheLoading || queryLoading || sessionStatus === 'loading';
+    const isLoading = cacheLoading || sessionStatus === 'loading';
     const isAuthenticated = sessionStatus === 'authenticated';
     const user = cachedUser || userData;
 
@@ -78,7 +66,6 @@ export const useUserData = () => {
         user,
         isLoading,
         isAuthenticated,
-        refetchUser: refetch,
         updateCachedUser: setCachedUserData,
         clearUserCache: clearCachedUserData,
     };

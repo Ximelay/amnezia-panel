@@ -1,4 +1,3 @@
-// app/(dashboard)/payment-settings/page.tsx
 'use client';
 
 import { useEffect } from 'react';
@@ -16,7 +15,7 @@ import {
     FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea'; // import Textarea
+import { Textarea } from '@/components/ui/textarea';
 import {
     Card,
     CardAction,
@@ -106,7 +105,6 @@ export default function PaymentSettingsPage() {
 
     useEffect(() => {
         if (settings) {
-            // Convert JSON array of admin IDs to a comma-separated string for the form
             let adminIdsString = '';
             if (settings.adminTelegramIds && Array.isArray(settings.adminTelegramIds)) {
                 adminIdsString = settings.adminTelegramIds.join(', ');

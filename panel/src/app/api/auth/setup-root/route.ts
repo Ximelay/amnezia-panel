@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
 import bcrypt from 'bcryptjs';
+import { logsService } from '@/server/services/logs';
 
 export async function POST(req: NextRequest) {
     const authHeader = req.headers.get('Authorization');
@@ -27,6 +28,8 @@ export async function POST(req: NextRequest) {
                 role: 'ROOT',
             },
         });
+
+        await logsService.createLog('ADMIN', 'INFO', 'Root has been added successfully');
 
         return NextResponse.json({
             success: true,

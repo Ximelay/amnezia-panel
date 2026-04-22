@@ -32,24 +32,6 @@ export function CustomPrismaAdapter(): Adapter {
             return null;
         },
 
-        async updateUser(user) {
-            const updatedUser = await db.admins.update({
-                where: { id: user.id },
-                data: {
-                    name: user.name || 'undefined',
-                },
-            });
-
-            return {
-                id: updatedUser.id,
-                email: 'null',
-                emailVerified: null,
-                login: updatedUser.login,
-                role: updatedUser.role,
-                isFirstLogin: updatedUser.isFirstLogin,
-            };
-        },
-
         async linkAccount() {
             return;
         },

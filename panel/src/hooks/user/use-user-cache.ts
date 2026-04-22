@@ -2,8 +2,8 @@ import type { Roles } from 'prisma/generated/enums';
 import { useState, useCallback, useEffect } from 'react';
 
 interface CachedUserData {
-    login: string;
-    role: Roles;
+    login?: string;
+    role?: Roles;
 }
 
 const USER_CACHE_KEY = 'userData';
