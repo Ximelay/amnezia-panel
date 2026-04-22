@@ -4,11 +4,7 @@ import { type Metadata } from 'next';
 import { Geist } from 'next/font/google';
 
 import { TRPCReactProvider } from '@/trpc/react';
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
-import { AppSidebar } from '../components/app-sidebar';
-import { navigation } from '@/lib/data/navigation';
-import { SidebarBreadCrumbs } from '../components/sidebar-breadcrumbs';
-import { Toaster } from '@/components/ui/sonner';
+import { LayoutWrapper } from '@/components/layout-wrapper';
 
 export const metadata: Metadata = {
     title: 'Amnezia Panel',
@@ -26,14 +22,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <html lang="en" className={`${geist.variable}`}>
             <body>
                 <TRPCReactProvider>
-                    <SidebarProvider>
-                        <AppSidebar navigation={navigation} />
-                        <SidebarInset>
-                            <SidebarBreadCrumbs />
-                            <main className="px-4 pb-4">{children}</main>
-                            <Toaster position="top-right" expand={true} />
-                        </SidebarInset>
-                    </SidebarProvider>
+                    <LayoutWrapper>{children}</LayoutWrapper>
                 </TRPCReactProvider>
             </body>
         </html>

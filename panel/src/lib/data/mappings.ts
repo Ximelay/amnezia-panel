@@ -1,4 +1,4 @@
-import { Languages, LevelTypes, LogTypes, Protocols } from 'prisma/generated/enums';
+import { Languages, LevelTypes, LogTypes, Protocols, Roles } from 'prisma/generated/enums';
 
 export const protocolsMapping: Record<Protocols, string> = {
     [Protocols.AMNEZIAWG2]: 'AmneziaWG 2.0',
@@ -39,4 +39,9 @@ export const logTypesMapping: Record<LogTypes, string> = {
 export const LanguagesMapping: Record<Languages, string> = {
     [Languages.ENGLISH]: 'English',
     [Languages.RUSSIAN]: 'Russian',
+};
+
+export const rolesMapping: Record<Roles, string> = {
+    [Roles.ROOT]: 'Root',
+    [Roles.ADMIN]: 'Admin',
 };

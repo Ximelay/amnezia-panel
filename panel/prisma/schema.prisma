@@ -18,6 +18,15 @@ model Servers {
     Configs   Configs[]
 }
 
+model Admins {
+    id           String      @id @default(cuid())
+    createdAt    DateTime    @default(now())
+    login        String      @unique
+    password     String
+    role         Roles
+    isFirstLogin Boolean     @default(true)
+}
+
 model Clients {
     id         Int       @id @default(autoincrement())
     createdAt  DateTime  @default(now())
@@ -61,6 +70,11 @@ model PaymentSettings {
     adminTelegramIds    Json?    // String[]
 }
 
+enum Roles {
+    ROOT
+    ADMIN
+}
+
 enum Protocols {
     AMNEZIAWG
     AMNEZIAWG2
@@ -74,6 +88,7 @@ enum LevelTypes {
 }
 
 enum LogTypes {
+    ADMIN
     TELEGRAM
     SERVER
     CLIENT

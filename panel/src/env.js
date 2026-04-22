@@ -12,7 +12,10 @@ export const env = createEnv({
             .default("development"),
         DATABASE_URL: z.string(),
         TELEGRAM_BOT_TOKEN: z.string().optional(),
-        ENCRYPTION_KEY: z.string()
+        ENCRYPTION_KEY: z.string(),
+        AUTH_SECRET: z.string(),
+        CRON_SECRET: z.string().optional(),
+        ROOT_SECRET: z.string().optional(),
     },
 
     /**
@@ -32,7 +35,10 @@ export const env = createEnv({
         NODE_ENV: process.env.NODE_ENV,
         DATABASE_URL: process.env.DATABASE_URL,
         TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
-        ENCRYPTION_KEY: process.env.ENCRYPTION_KEY
+        ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
+        AUTH_SECRET: process.env.AUTH_SECRET,
+        CRON_SECRET: process.env.CRON_SECRET,
+        ROOT_SECRET: process.env.ROOT_SECRET,
     },
     /**
      * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

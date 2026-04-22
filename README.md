@@ -13,8 +13,6 @@ A modern web administration panel for AmneziaVPN, built with Next.js App Router,
 
 Amnezia Panel is a web-based administration interface that integrates with the _Amnezia API_ to manage AmneziaVPN instances. It provides a user-friendly dashboard for configuring VPN servers, managing clients, and monitoring connection statistics.
 
-**⚠️ Security Notice:** The panel exposes port 8443. Ensure this port is properly secured with a firewall, reverse proxy (nginx), or cloud security groups before deployment.
-
 ## Deployment & Quick Start
 
 Follow these instructions to deploy and run the project locally for development and testing.
@@ -41,9 +39,36 @@ cd amnezia-panel
 bash scripts/deploy.sh
 ```
 
-### Step 3: Security
+### Step 3: Create Initial Root User
 
-Protect port 8443 properly with a firewall or reverse proxy (nginx).
+After the deployment script completes, you must create the initial administrative user. Run the following command from the project root:
+
+```bash
+bash scripts/setup-root.sh
+```
+
+The script will guide you through creating the ROOT user account. You will be prompted to set:
+
+- An username (defaults to root if left blank, though changing it is strongly recommended for security).
+- A temporary password.
+
+**Important**: The password you set here is temporary. Upon first login, the web panel will require you to change it before you can access any functionality.
+
+> 🔐 Security of administrative scripts
+> Both `setup-root.sh` and the recovery script `reset-root.sh` are protected by a `ROOT_SECRET` environment variable. This secret is automatically generated during deployment using `openssl rand -base64 32` and stored in the `.env` file. The scripts will only execute if the provided secret matches the one on record. This ensures that:
+>
+> - No one can run these scripts without access to the server's file system.
+> - Remote code execution or web-based attacks cannot trigger privilege escalation.
+
+#### Lost access?
+
+If you forget the `ROOT` username or password, you can safely reset the account using:
+
+```bash
+bash scripts/reset-root.sh
+```
+
+See the Account Recovery section for details.
 
 ## Encryption
 
@@ -56,6 +81,52 @@ openssl rand -base64 32
 ```
 
 **Note:** Save the encryption key.
+
+## Authentication & Authorization
+
+The panel implements a robust, token-based security model designed for modern web applications.
+
+### Session Management
+
+- **JWT (JSON Web Token)** – Access tokens are issued upon successful login and expire after **2 hours** of inactivity. This short-lived token approach minimizes the risk window if a token is compromised.
+- **CSRF Protection** – A dedicated CSRF token is required for all state-changing requests (POST, PUT, DELETE), preventing cross-site request forgery attacks.
+
+### User Roles and Privileges
+
+The system distinguishes between two distinct roles with clearly separated responsibilities:
+
+| Role      | Capabilities                                                                                                                                                                                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ROOT**  | • Add new administrative users (all added users receive the `ADMIN` role)<br>• Delete existing `ADMIN` accounts<br>• Change their own login username (the default `root` username should be changed for security)<br>• Full VPN instance and client management |
+| **ADMIN** | • Manage VPN servers and client configurations<br>• View statistics and connection logs<br>• **Cannot** manage other user accounts                                                                                                                             |
+
+> **Note:** Only **one** `ROOT` account may exist in the system at any time. The initial account created via `setup-root.sh` is assigned this role.
+
+### Mandatory Password Change
+
+To enforce strong security hygiene, the panel enforces the following password policy:
+
+- **First Login** – Immediately after authenticating with the temporary password set during deployment, the user is redirected to a password change form. Access to the rest of the panel is **blocked** until a new password is set.
+- **Voluntary Change** – Any authenticated user may change their password at any time via the profile section within the panel.
+
+### Root Login Customization
+
+The `ROOT` user is created with a default username (`root`) unless specified otherwise during setup. Because this is a predictable target for brute-force attempts, the panel allows the `ROOT` user to **rename their own login** after their initial password change. This optional step significantly improves the security posture of the deployment and is highly recommended.
+
+All credentials and sensitive data are handled exclusively over HTTPS (in production) and are never stored in plaintext (passwords are hashed using a secure one-way algorithm before database storage).
+
+### Account Recovery (Root Only)
+
+In the event that the `ROOT` user's credentials are lost or forgotten, the panel includes a secure command-line recovery utility:
+
+```bash
+bash scripts/reset-root.sh
+```
+
+**What it does:**
+
+- Prompts for the `ROOT_SECRET` (found in the `.env` file).
+- Hashes the new password and updates the database directly.
 
 ## Optional Features
 
@@ -102,6 +173,8 @@ amnezia-panel/
 │   └── backup-amnezia.sh      # Configurations backup automation, not tested
 │   └── time2pay.sh            # Script for payment notifications to Telegram
 │   └── deploy.sh              # Production deployment script
+│   └── setup-root.sh          # Initial ROOT user creation
+│   └── reset-root.sh          # ROOT account recovery
 └── LICENSE
 └── README.md                  # This documentation
 ```

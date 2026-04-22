@@ -9,12 +9,12 @@ else
     exit 1
 fi
 
-if [ -z "${CRON_SECRET}" ]; then
-    echo "Error: CRON_SECRET not set in .env file!"
+if [ -z "${ROOT_SECRET}" ]; then
+    echo "Error: ROOT_SECRET not set in .env file!"
     exit 1
 fi
 
 MACHINE_IP=$(hostname -I | awk '{print $1}')
 
-curl -X POST "https://$MACHINE_IP:8443/api/cron/time2pay" -H "Authorization: Bearer $CRON_SECRET" \
+curl -X POST "https://$MACHINE_IP/api/auth/reset-root" -H "Authorization: Bearer $ROOT_SECRET" \
     --insecure # delete if will be not selfsigned cert

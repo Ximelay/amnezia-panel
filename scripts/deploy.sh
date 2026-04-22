@@ -30,10 +30,17 @@ get_project_root() {
 generate_encryption_key() {
     if command -v node &> /dev/null; then
         node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" 2>/dev/null || echo ""
-    elif command -v openssl &> /dev/null; then
+    else
+        print_error "Neither node not found. Cannot generate encryption key."
+        exit 1
+    fi
+}
+
+generate_auth_secret() {
+    if command -v openssl &> /dev/null; then
         openssl rand -base64 32 2>/dev/null || echo ""
     else
-        print_error "Neither node nor openssl found. Cannot generate encryption key."
+        print_error "Neither openssl not found. Cannot generate auth secret."
         exit 1
     fi
 }
@@ -314,6 +321,20 @@ main() {
         print_message "Using existing ENCRYPTION_KEY from .env"
     fi
 
+    AUTH_SECRET=$(read_env_value "AUTH_SECRET" "$ENV_FILE")
+    if [ -z "$AUTH_SECRET" ]; then
+        print_message "Generating new AUTH_SECRET..."
+        AUTH_SECRET=$(generate_auth_secret)
+        if [ -n "$AUTH_SECRET" ]; then
+            print_message "AUTH_SECRET generated successfully"
+        else
+            print_error "Failed to generate AUTH_SECRET"
+            exit 1
+        fi
+    else
+        print_message "Using existing AUTH_SECRET from .env"
+    fi
+
     CRON_SECRET=$(read_env_value "CRON_SECRET" "$ENV_FILE")
     if [ -z "$CRON_SECRET" ]; then
         print_message "Generating new CRON_SECRET..."
@@ -326,6 +347,20 @@ main() {
         fi
     else
         print_message "Using existing CRON_SECRET from .env"
+    fi
+
+    ROOT_SECRET=$(read_env_value "ROOT_SECRET" "$ENV_FILE")
+    if [ -z "$ROOT_SECRET" ]; then
+        print_message "Generating new ROOT_SECRET..."
+        ROOT_SECRET=$(generate_encryption_key)
+        if [ -n "$ROOT_SECRET" ]; then
+            print_message "ROOT_SECRET generated successfully"
+        else
+            print_error "Failed to generate ROOT_SECRET"
+            exit 1
+        fi
+    else
+        print_message "Using existing ROOT_SECRET from .env"
     fi
 
     NODE_ENV=$(prompt_with_default "NODE_ENV" "Node environment (development/test/production)" "production" false "$ENV_FILE")
@@ -354,6 +389,11 @@ ENCRYPTION_KEY="${ENCRYPTION_KEY}"
 
 # Cron secret key
 CRON_SECRET="${CRON_SECRET}"
+# Root secret key
+ROOT_SECRET="${ROOT_SECRET}"
+
+# Auth secret key
+AUTH_SECRET="${AUTH_SECRET}"
 
 # development or test or production
 NODE_ENV="${NODE_ENV}"
@@ -433,6 +473,8 @@ EOF
     print_warning "Note: Using self-signed certificate. You may need to accept the security warning in your browser."
     print_warning "Note: If you have ENCRYPTION_KEY and old database then change .env."
     echo "================================================"
+    print_message "Run the script <setup-root.sh> if you built the Amnezia Panel for the first time"
+    echo ""
 }
 
 main "$@"

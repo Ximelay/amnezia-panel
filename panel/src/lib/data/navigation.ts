@@ -1,6 +1,9 @@
+import type { Roles } from 'prisma/generated/enums';
+
 type NavigationItem = {
     title: string;
     url: string;
+    role: Roles;
 };
 
 type NavigationSection = {
@@ -22,10 +25,12 @@ export const navigation: Navigation = {
                 {
                     title: 'Clients table',
                     url: '/clients',
+                    role: 'ADMIN',
                 },
                 {
                     title: 'Create client',
                     url: '/create-client',
+                    role: 'ADMIN',
                 },
             ],
         },
@@ -36,14 +41,17 @@ export const navigation: Navigation = {
                 {
                     title: 'Logs',
                     url: '/logs',
+                    role: 'ADMIN',
                 },
                 {
                     title: 'Payment settings',
                     url: '/payment-settings',
+                    role: 'ADMIN',
                 },
                 {
                     title: 'Notification',
                     url: '/notification',
+                    role: 'ADMIN',
                 },
             ],
         },
@@ -54,12 +62,25 @@ export const navigation: Navigation = {
                 {
                     title: 'Servers',
                     url: '/servers',
+                    role: 'ADMIN',
                 },
                 {
                     title: 'Server Info',
                     url: '/server-info',
+                    role: 'ADMIN',
                 },
             ],
         },
+        // {
+        //     title: 'Panel',
+        //     url: '#',
+        //     items: [
+        //         {
+        //             title: 'Admins',
+        //             url: '/admins',
+        //             role: 'ROOT',
+        //         },
+        //     ],
+        // },
     ],
 };

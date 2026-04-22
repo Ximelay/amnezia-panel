@@ -1,14 +1,14 @@
 import { upsertPaymentSettingsSchema } from '@/lib/schemas/payment-settings';
-import { createTRPCRouter, publicProcedure } from '../trpc';
+import { createTRPCRouter, protectedProcedureWithRole } from '../trpc';
 
 export const paymentSettingsRouter = createTRPCRouter({
-    getPaymentSettings: publicProcedure.query(async ({ ctx }) => {
+    getPaymentSettings: protectedProcedureWithRole('ADMIN').query(async ({ ctx }) => {
         return await ctx.db.paymentSettings.findFirst({
             where: { id: 1 },
         });
     }),
 
-    upsertPaymentSettings: publicProcedure
+    upsertPaymentSettings: protectedProcedureWithRole('ADMIN')
         .input(upsertPaymentSettingsSchema)
         .mutation(async ({ input, ctx }) => {
             const {

@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-import { createTRPCRouter, publicProcedure } from '@/server/api/trpc';
+import { createTRPCRouter, protectedProcedureWithRole } from '@/server/api/trpc';
 import { logsService } from '@/server/services/logs';
 import type { LevelTypesFilter } from '@/server/enums';
 import type { LogTypes } from 'prisma/generated/enums';
@@ -13,11 +12,11 @@ import type { Prisma } from 'prisma/generated/client';
 import { serversCacheService } from '@/server/services/cache/servers-cache';
 
 export const serversRouter = createTRPCRouter({
-    getServers: publicProcedure.query(async () => {
+    getServers: protectedProcedureWithRole('ADMIN').query(async () => {
         return await serversCacheService.getServers();
     }),
 
-    getServerInfo: publicProcedure
+    getServerInfo: protectedProcedureWithRole('ADMIN')
         .input(z.object({ serverId: z.number() }))
         .query(async ({ input }) => {
             const { serverId } = input;
@@ -25,7 +24,7 @@ export const serversRouter = createTRPCRouter({
             return await amneziaApiService.getServerInfo(serverId);
         }),
 
-    getServerLoad: publicProcedure
+    getServerLoad: protectedProcedureWithRole('ADMIN')
         .input(z.object({ serverId: z.number() }))
         .query(async ({ input }) => {
             const { serverId } = input;
@@ -33,7 +32,7 @@ export const serversRouter = createTRPCRouter({
             return await amneziaApiService.getServerLoad(serverId);
         }),
 
-    getLogs: publicProcedure
+    getLogs: protectedProcedureWithRole('ADMIN')
         .input(
             z.object({
                 search: z.string().optional(),
@@ -47,7 +46,7 @@ export const serversRouter = createTRPCRouter({
             return await logsService.getLogs(input);
         }),
 
-    downloadBackup: publicProcedure
+    downloadBackup: protectedProcedureWithRole('ADMIN')
         .input(z.object({ serverId: z.number() }))
         .mutation(async ({ ctx, input }) => {
             const { serverId } = input;
@@ -85,7 +84,7 @@ export const serversRouter = createTRPCRouter({
             };
         }),
 
-    importBackup: publicProcedure
+    importBackup: protectedProcedureWithRole('ADMIN')
         .input(z.object({ serverId: z.number(), fileContent: z.string() }))
         .mutation(async ({ input }) => {
             const { serverId, fileContent } = input;
@@ -113,7 +112,7 @@ export const serversRouter = createTRPCRouter({
             );
         }),
 
-    rebootServer: publicProcedure
+    rebootServer: protectedProcedureWithRole('ADMIN')
         .input(z.object({ serverId: z.number() }))
         .mutation(async ({ input }) => {
             const { serverId } = input;
@@ -123,15 +122,17 @@ export const serversRouter = createTRPCRouter({
             await amneziaApiService.rebootServer(serverId);
         }),
 
-    upsertServer: publicProcedure.input(upsertServerSchema).mutation(async ({ input }) => {
-        const { id, name } = input;
+    upsertServer: protectedProcedureWithRole('ADMIN')
+        .input(upsertServerSchema)
+        .mutation(async ({ input }) => {
+            const { id, name } = input;
 
-        await serversCacheService.upsertServer(input, id);
+            await serversCacheService.upsertServer(input, id);
 
-        await logsService.createLog('SERVER', 'INFO', `Server ${name} was saved`);
-    }),
+            await logsService.createLog('SERVER', 'INFO', `Server ${name} was saved`);
+        }),
 
-    deleteServer: publicProcedure
+    deleteServer: protectedProcedureWithRole('ADMIN')
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
             const { id } = input;
@@ -145,7 +146,7 @@ export const serversRouter = createTRPCRouter({
             );
         }),
 
-    getServersTable: publicProcedure
+    getServersTable: protectedProcedureWithRole('ADMIN')
         .input(
             z.object({
                 search: z.string().optional(),

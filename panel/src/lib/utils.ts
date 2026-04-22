@@ -140,3 +140,6 @@ export function telegramToastError(error: any) {
         console.error(error);
     }
 }
+
+export const rolesHierarchy = ['ADMIN', 'ROOT'] as const;
+export type Role = (typeof rolesHierarchy)[number];

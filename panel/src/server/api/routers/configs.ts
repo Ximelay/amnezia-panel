@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { createTRPCRouter, publicProcedure } from '@/server/api/trpc';
+import { createTRPCRouter, protectedProcedureWithRole } from '@/server/api/trpc';
 import {
     createConfigSchema,
     updateClientConfigSchema,
@@ -16,34 +16,36 @@ import { format } from 'date-fns';
 import { telegramService } from '@/server/services/telegram/telegram';
 
 export const configsRouter = createTRPCRouter({
-    createConfig: publicProcedure.input(createConfigSchema).mutation(async ({ ctx, input }) => {
-        const { clientId, serverId, clientName, expiresAt, protocol } = input;
+    createConfig: protectedProcedureWithRole('ADMIN')
+        .input(createConfigSchema)
+        .mutation(async ({ ctx, input }) => {
+            const { clientId, serverId, clientName, expiresAt, protocol } = input;
 
-        const createdConfig = await amneziaApiService.createConfig(
-            Number(serverId),
-            clientName,
-            protocolsApiMapping[protocol],
-            Number(expiresAt)
-        );
-
-        const encryptedVpnKey = encryptionService.encrypt(createdConfig.client.config);
-
-        await ctx.db.configs.create({
-            data: {
-                id: createdConfig.client.id,
-                serverId: Number(serverId),
-                clientId: Number(clientId) || null,
+            const createdConfig = await amneziaApiService.createConfig(
+                Number(serverId),
                 clientName,
-                expiresAt,
-                protocol,
-                vpnKey: encryptedVpnKey,
-            },
-        });
+                protocolsApiMapping[protocol],
+                Number(expiresAt)
+            );
 
-        await logsService.createLog('CLIENT', 'INFO', `Config ${clientName} created`);
-    }),
+            const encryptedVpnKey = encryptionService.encrypt(createdConfig.client.config);
 
-    updateClientConfig: publicProcedure
+            await ctx.db.configs.create({
+                data: {
+                    id: createdConfig.client.id,
+                    serverId: Number(serverId),
+                    clientId: Number(clientId) || null,
+                    clientName,
+                    expiresAt,
+                    protocol,
+                    vpnKey: encryptedVpnKey,
+                },
+            });
+
+            await logsService.createLog('CLIENT', 'INFO', `Config ${clientName} created`);
+        }),
+
+    updateClientConfig: protectedProcedureWithRole('ADMIN')
         .input(updateClientConfigSchema)
         .mutation(async ({ ctx, input }) => {
             const { id, clientId } = input;
@@ -61,7 +63,7 @@ export const configsRouter = createTRPCRouter({
             );
         }),
 
-    deleteConfig: publicProcedure
+    deleteConfig: protectedProcedureWithRole('ADMIN')
         .input(z.object({ serverId: z.number(), id: z.string(), protocol: z.enum(Protocols) }))
         .mutation(async ({ ctx, input }) => {
             const { serverId, id, protocol } = input;
@@ -91,18 +93,20 @@ export const configsRouter = createTRPCRouter({
             );
         }),
 
-    getVpnKey: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
-        const { id } = input;
+    getVpnKey: protectedProcedureWithRole('ADMIN')
+        .input(z.object({ id: z.string() }))
+        .query(async ({ ctx, input }) => {
+            const { id } = input;
 
-        const foundConfig = await ctx.db.configs.findUnique({
-            where: { id },
-            select: { vpnKey: true },
-        });
+            const foundConfig = await ctx.db.configs.findUnique({
+                where: { id },
+                select: { vpnKey: true },
+            });
 
-        return await encryptionService.decryptField(foundConfig?.vpnKey);
-    }),
+            return await encryptionService.decryptField(foundConfig?.vpnKey);
+        }),
 
-    sendVpnKey: publicProcedure
+    sendVpnKey: protectedProcedureWithRole('ADMIN')
         .input(z.object({ id: z.string() }))
         .mutation(async ({ ctx, input }) => {
             const { id } = input;
@@ -162,7 +166,7 @@ Expiration date: <b>${expiryDate}</b>
             );
         }),
 
-    updateExpiresAt: publicProcedure
+    updateExpiresAt: protectedProcedureWithRole('ADMIN')
         .input(updateExpiresAtSchema)
         .mutation(async ({ ctx, input }) => {
             const { id, expiresAt } = input;
@@ -195,7 +199,7 @@ Expiration date: <b>${expiryDate}</b>
             );
         }),
 
-    updateStatus: publicProcedure
+    updateStatus: protectedProcedureWithRole('ADMIN')
         .input(z.object({ id: z.string().min(1), status: z.string().min(1) }))
         .mutation(async ({ ctx, input }) => {
             const { id, status } = input;

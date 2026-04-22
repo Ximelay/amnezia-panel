@@ -26,7 +26,7 @@ import { Plus, Loader2, Edit } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/trpc/react';
 import { upsertServerSchema, type upsertServerFormData } from '@/lib/schemas/servers';
-import { InputApiKey } from '@/components/input-api-key';
+import { InputPassword } from '@/components/input-password';
 
 interface Props {
     server?: {
@@ -163,7 +163,7 @@ export function UpsertServerDialog({ server, trigger }: Props) {
                                         Amnezia API Key <span className="text-destructive">*</span>
                                     </FormLabel>
                                     <FormControl>
-                                        <InputApiKey placeholder="Enter API key" {...field} />
+                                        <InputPassword placeholder="Enter API key" {...field} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

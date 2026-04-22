@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { createTRPCRouter, publicProcedure } from '@/server/api/trpc';
+import { createTRPCRouter, protectedProcedureWithRole } from '@/server/api/trpc';
 import type { ProtocolsFilter } from '@/server/enums';
 import type { Languages, Prisma } from 'prisma/generated/client';
 import {
@@ -19,7 +19,7 @@ import { telegramService } from '@/server/services/telegram/telegram';
 import { updateExpiresAtSchema } from '@/lib/schemas/configs';
 
 export const clientsRouter = createTRPCRouter({
-    getClients: publicProcedure
+    getClients: protectedProcedureWithRole('ADMIN')
         .input(z.object({ serverId: z.string().optional() }))
         .query(async ({ input, ctx }) => {
             const { serverId } = input;
@@ -41,7 +41,7 @@ export const clientsRouter = createTRPCRouter({
             });
         }),
 
-    getClientsWithConfigs: publicProcedure
+    getClientsWithConfigs: protectedProcedureWithRole('ADMIN')
         .input(
             z.object({
                 serverId: z.string().optional(),
@@ -214,54 +214,62 @@ export const clientsRouter = createTRPCRouter({
             };
         }),
 
-    createClient: publicProcedure.input(createClientSchema).mutation(async ({ ctx, input }) => {
-        const { name, language, telegramId, configs } = input;
+    createClient: protectedProcedureWithRole('ADMIN')
+        .input(createClientSchema)
+        .mutation(async ({ ctx, input }) => {
+            const { name, language, telegramId, configs } = input;
 
-        const createdClient = await ctx.db.clients.create({
-            data: { name, language: language as Languages, telegramId },
-        });
-
-        for (const config of configs) {
-            const createdConfig = await amneziaApiService.createConfig(
-                Number(config.serverId),
-                config.clientName,
-                protocolsApiMapping[config.protocol],
-                Number(config.expiresAt)
-            );
-
-            const encryptedVpnKey = encryptionService.encrypt(createdConfig.client.config);
-
-            await ctx.db.configs.create({
-                data: {
-                    id: createdConfig.client.id,
-                    clientName: config.clientName,
-                    vpnKey: encryptedVpnKey,
-                    protocol: config.protocol,
-                    expiresAt: config.expiresAt,
-                    clientId: createdClient.id,
-                    serverId: Number(config.serverId),
-                },
+            const createdClient = await ctx.db.clients.create({
+                data: { name, language: language as Languages, telegramId },
             });
 
-            await logsService.createLog('CLIENT', 'INFO', `Config ${config.clientName} created`);
-        }
+            for (const config of configs) {
+                const createdConfig = await amneziaApiService.createConfig(
+                    Number(config.serverId),
+                    config.clientName,
+                    protocolsApiMapping[config.protocol],
+                    Number(config.expiresAt)
+                );
 
-        await logsService.createLog('CLIENT', 'INFO', `Client ${createdClient.name} created`);
-    }),
+                const encryptedVpnKey = encryptionService.encrypt(createdConfig.client.config);
 
-    updateClient: publicProcedure.input(updateClientSchema).mutation(async ({ ctx, input }) => {
-        const { id, name, telegramId } = input;
+                await ctx.db.configs.create({
+                    data: {
+                        id: createdConfig.client.id,
+                        clientName: config.clientName,
+                        vpnKey: encryptedVpnKey,
+                        protocol: config.protocol,
+                        expiresAt: config.expiresAt,
+                        clientId: createdClient.id,
+                        serverId: Number(config.serverId),
+                    },
+                });
 
-        const updatedClient = await ctx.db.clients.update({
-            where: { id },
-            data: { name, telegramId },
-            select: { name: true },
-        });
+                await logsService.createLog(
+                    'CLIENT',
+                    'INFO',
+                    `Config ${config.clientName} created`
+                );
+            }
 
-        await logsService.createLog('CLIENT', 'INFO', `Client ${updatedClient.name} updated`);
-    }),
+            await logsService.createLog('CLIENT', 'INFO', `Client ${createdClient.name} created`);
+        }),
 
-    deleteClient: publicProcedure
+    updateClient: protectedProcedureWithRole('ADMIN')
+        .input(updateClientSchema)
+        .mutation(async ({ ctx, input }) => {
+            const { id, name, telegramId } = input;
+
+            const updatedClient = await ctx.db.clients.update({
+                where: { id },
+                data: { name, telegramId },
+                select: { name: true },
+            });
+
+            await logsService.createLog('CLIENT', 'INFO', `Client ${updatedClient.name} updated`);
+        }),
+
+    deleteClient: protectedProcedureWithRole('ADMIN')
         .input(z.object({ id: z.number() }))
         .mutation(async ({ ctx, input }) => {
             const { id } = input;
@@ -295,7 +303,7 @@ export const clientsRouter = createTRPCRouter({
             );
         }),
 
-    sendKeysForClient: publicProcedure
+    sendKeysForClient: protectedProcedureWithRole('ADMIN')
         .input(z.object({ id: z.number() }))
         .mutation(async ({ ctx, input }) => {
             const { id } = input;
@@ -341,7 +349,7 @@ export const clientsRouter = createTRPCRouter({
             );
         }),
 
-    sendAllKeys: publicProcedure.mutation(async ({ ctx }) => {
+    sendAllKeys: protectedProcedureWithRole('ADMIN').mutation(async ({ ctx }) => {
         const foundClients = await ctx.db.clients.findMany({
             select: {
                 name: true,
@@ -381,7 +389,7 @@ export const clientsRouter = createTRPCRouter({
         await logsService.createLog('TELEGRAM', 'INFO', `VPN keys sent for clients`);
     }),
 
-    sendDownloadLinks: publicProcedure
+    sendDownloadLinks: protectedProcedureWithRole('ADMIN')
         .input(z.object({ id: z.number() }))
         .mutation(async ({ ctx, input }) => {
             const { id } = input;
@@ -434,7 +442,7 @@ export const clientsRouter = createTRPCRouter({
             );
         }),
 
-    sendNotification: publicProcedure
+    sendNotification: protectedProcedureWithRole('ADMIN')
         .input(sendNotificationSchema)
         .mutation(async ({ ctx, input }) => {
             const { clientId, message } = input;
@@ -507,7 +515,7 @@ export const clientsRouter = createTRPCRouter({
             }
         }),
 
-    updateExpiresAt: publicProcedure
+    updateExpiresAt: protectedProcedureWithRole('ADMIN')
         .input(updateExpiresAtSchema)
         .mutation(async ({ ctx, input }) => {
             const { id, expiresAt } = input;
@@ -542,7 +550,7 @@ export const clientsRouter = createTRPCRouter({
             );
         }),
 
-    updateStatus: publicProcedure
+    updateStatus: protectedProcedureWithRole('ADMIN')
         .input(z.object({ clientId: z.number().min(1), status: z.string().min(1) }))
         .mutation(async ({ ctx, input }) => {
             const { clientId, status } = input;
