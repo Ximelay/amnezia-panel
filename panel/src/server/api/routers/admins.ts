@@ -2,8 +2,6 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { createTRPCRouter, protectedProcedure, protectedProcedureWithRole } from '../trpc';
 import { TRPCError } from '@trpc/server';
-import type { RolesFilter } from '@/server/enums';
-import type { Prisma } from 'prisma/generated/client';
 import { upsertAdminSchema } from '@/lib/schemas/admins';
 import { logsService } from '@/server/services/logs';
 
@@ -36,7 +34,7 @@ export const adminsRouter = createTRPCRouter({
 
                 await ctx.db.admins.update({
                     where: { id },
-                    data: { password: hashedPassword },
+                    data: { password: hashedPassword, isFirstLogin: true },
                 });
             } else {
                 const existingAdmin = await ctx.db.admins.findUnique({
@@ -80,12 +78,15 @@ export const adminsRouter = createTRPCRouter({
 
             const foundUser = await ctx.db.admins.findUnique({
                 where: { id },
-                select: { login: true },
+                select: { login: true, role: true },
             });
 
             if (!foundUser) {
                 await logsService.createLog('ADMIN', 'ERROR', `User with id ${id} not found`);
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+            }
+            if (foundUser.role === 'ROOT') {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'You cant delete ROOT' });
             }
 
             const deletedAdmin = await ctx.db.admins.delete({
@@ -178,42 +179,26 @@ export const adminsRouter = createTRPCRouter({
                 },
             });
         }),
-    getCurrentUser: protectedProcedure.query(async ({ ctx }) => {
-        return await ctx.db.admins.findUnique({
-            where: {
-                id: ctx.session.user.id,
-            },
-            select: {
-                login: true,
-                role: true,
-            },
-        });
-    }),
     getAdmins: protectedProcedureWithRole('ROOT')
-        .input(
-            z.object({
-                search: z.string().optional(),
-                roleFilter: z.string() as z.ZodType<RolesFilter>,
-            })
-        )
+        .input(z.object({ search: z.string().optional() }))
         .query(async ({ ctx, input }) => {
-            const { search, roleFilter } = input;
-
-            const whereUsers: Prisma.AdminsWhereInput = {
-                login: {
-                    contains: search,
-                    mode: 'insensitive',
-                },
-            };
-
-            if (roleFilter && roleFilter !== 'All') {
-                whereUsers.role = roleFilter;
-            }
+            const { search } = input;
 
             return await ctx.db.admins.findMany({
-                where: whereUsers,
+                where: {
+                    login: {
+                        contains: search,
+                        mode: 'insensitive',
+                    },
+                },
+                select: {
+                    id: true,
+                    createdAt: true,
+                    login: true,
+                    role: true,
+                },
                 orderBy: {
-                    createdAt: 'desc',
+                    createdAt: 'asc',
                 },
             });
         }),

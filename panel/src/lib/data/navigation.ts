@@ -35,6 +35,22 @@ export const navigation: Navigation = {
             ],
         },
         {
+            title: 'Servers',
+            url: '#',
+            items: [
+                {
+                    title: 'Servers',
+                    url: '/servers',
+                    role: 'ADMIN',
+                },
+                {
+                    title: 'Server Info',
+                    url: '/server-info',
+                    role: 'ADMIN',
+                },
+            ],
+        },
+        {
             title: 'Info',
             url: '#',
             items: [
@@ -56,31 +72,15 @@ export const navigation: Navigation = {
             ],
         },
         {
-            title: 'Servers',
+            title: 'Panel',
             url: '#',
             items: [
                 {
-                    title: 'Servers',
-                    url: '/servers',
-                    role: 'ADMIN',
-                },
-                {
-                    title: 'Server Info',
-                    url: '/server-info',
-                    role: 'ADMIN',
+                    title: 'Admins',
+                    url: '/admins',
+                    role: 'ROOT',
                 },
             ],
         },
-        // {
-        //     title: 'Panel',
-        //     url: '#',
-        //     items: [
-        //         {
-        //             title: 'Admins',
-        //             url: '/admins',
-        //             role: 'ROOT',
-        //         },
-        //     ],
-        // },
     ],
 };

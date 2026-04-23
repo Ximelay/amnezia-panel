@@ -1,5 +1,5 @@
 import { clsx, type ClassValue } from 'clsx';
-import type { LevelTypes, LogTypes, Protocols } from 'prisma/generated/enums';
+import type { LevelTypes, LogTypes, Protocols, Roles } from 'prisma/generated/enums';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -127,6 +127,17 @@ export const getLogTypeColor = (levelType: LogTypes) => {
             return 'bg-pink-100 text-pink-800';
         case 'CLIENT':
             return 'bg-green-100 text-green-800';
+        // case 'ADMIN':
+        //     return 'bg-green-100 text-green-800';
+    }
+};
+
+export const getRoleColor = (role: Roles) => {
+    switch (role) {
+        case 'ADMIN':
+            return 'bg-blue-100 text-blue-800';
+        case 'ROOT':
+            return 'bg-red-100 text-red-800';
     }
 };
 

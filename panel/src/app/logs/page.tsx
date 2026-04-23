@@ -64,6 +64,10 @@ const optionsLogTypes = [
         value: LogTypes.CLIENT,
         label: logTypesMapping[LogTypes.CLIENT],
     },
+    {
+        value: LogTypes.ADMIN,
+        label: logTypesMapping[LogTypes.ADMIN],
+    },
 ];
 
 export default function LogsPage() {

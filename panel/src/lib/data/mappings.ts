@@ -34,7 +34,7 @@ export const logTypesMapping: Record<LogTypes, string> = {
     [LogTypes.CLIENT]: 'Client',
     [LogTypes.SERVER]: 'Server',
     [LogTypes.TELEGRAM]: 'Telegram',
-    [LogTypes.ADMIN]: 'Admin',
+    [LogTypes.ADMIN]: 'Admins',
 };
 
 export const LanguagesMapping: Record<Languages, string> = {
