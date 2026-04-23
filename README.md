@@ -55,10 +55,7 @@ The script will guide you through creating the ROOT user account. You will be pr
 **Important**: The password you set here is temporary. Upon first login, the web panel will require you to change it before you can access any functionality.
 
 > 🔐 Security of administrative scripts
-> Both `setup-root.sh` and the recovery script `reset-root.sh` are protected by a `ROOT_SECRET` environment variable. This secret is automatically generated during deployment using `openssl rand -base64 32` and stored in the `.env` file. The scripts will only execute if the provided secret matches the one on record. This ensures that:
->
-> - No one can run these scripts without access to the server's file system.
-> - Remote code execution or web-based attacks cannot trigger privilege escalation.
+> Both `setup-root.sh` and the recovery script `reset-root.sh` are protected by a `ROOT_SECRET` environment variable. This secret is automatically generated during deployment and stored in the `.env` file. The scripts will only execute if the provided secret matches the one on record.
 
 #### Lost access?
 
@@ -136,7 +133,7 @@ If you provide a **Telegram Bot Token** during deployment, the panel will unlock
 
 - **Admin Notifications** – Send notifications to admins when users make a payment for the VPN.
 
-- **User Notifications** – Send clients their VPN configuration and download instructions directly via Telegram.
+- **User Notifications** – Send clients their VPN configurations and download instructions directly via Telegram.
 
 - **Payment Notifications** – If a client's configuration expires tomorrow, they will be notified.
 
