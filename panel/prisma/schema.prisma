@@ -19,12 +19,13 @@ model Servers {
 }
 
 model Admins {
-    id           String      @id @default(cuid())
-    createdAt    DateTime    @default(now())
-    login        String      @unique
+    id           String   @id @default(cuid())
+    createdAt    DateTime @default(now())
+    login        String   @unique
     password     String
     role         Roles
-    isFirstLogin Boolean     @default(true)
+    isFirstLogin Boolean  @default(true)
+    Logs         Logs[]
 }
 
 model Clients {
@@ -57,6 +58,8 @@ model Logs {
     logType   LogTypes
     levelType LevelTypes
     message   String
+    adminId   String?
+    Admins    Admins?    @relation(fields: [adminId], references: [id])
 }
 
 model PaymentSettings {
@@ -67,7 +70,7 @@ model PaymentSettings {
     additionalPrice     Float
     defaultConfigsCount Int
     paymentLink         String
-    adminTelegramIds    Json?    // String[]
+    adminTelegramIds    Json? // String[]
 }
 
 enum Roles {

@@ -4,6 +4,7 @@ import type { NextAuthOptions } from 'next-auth';
 import { db } from '../db';
 import { CustomPrismaAdapter } from './adapter';
 import type { Roles } from 'prisma/generated/enums';
+import { logsService } from '../services/logs';
 
 export const authOptions: NextAuthOptions = {
     adapter: CustomPrismaAdapter(),
@@ -34,6 +35,12 @@ export const authOptions: NextAuthOptions = {
                 const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
 
                 if (!isPasswordValid) return null;
+
+                await logsService.createLog(
+                    'ADMIN',
+                    'INFO',
+                    `Authorize success for admin <${credentials.login}>`
+                );
 
                 return {
                     id: user.id,

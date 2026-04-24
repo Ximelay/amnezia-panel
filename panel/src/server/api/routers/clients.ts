@@ -248,11 +248,17 @@ export const clientsRouter = createTRPCRouter({
                 await logsService.createLog(
                     'CLIENT',
                     'INFO',
-                    `Config ${config.clientName} created`
+                    `Config <${config.clientName}> created`,
+                    ctx.session.user.id
                 );
             }
 
-            await logsService.createLog('CLIENT', 'INFO', `Client ${createdClient.name} created`);
+            await logsService.createLog(
+                'CLIENT',
+                'INFO',
+                `Client <${createdClient.name}> created`,
+                ctx.session.user.id
+            );
         }),
 
     updateClient: protectedProcedureWithRole('ADMIN')
@@ -266,7 +272,12 @@ export const clientsRouter = createTRPCRouter({
                 select: { name: true },
             });
 
-            await logsService.createLog('CLIENT', 'INFO', `Client ${updatedClient.name} updated`);
+            await logsService.createLog(
+                'CLIENT',
+                'INFO',
+                `Client <${updatedClient.name}> updated`,
+                ctx.session.user.id
+            );
         }),
 
     deleteClient: protectedProcedureWithRole('ADMIN')
@@ -299,7 +310,8 @@ export const clientsRouter = createTRPCRouter({
             await logsService.createLog(
                 'CLIENT',
                 'WARNING',
-                `Client ${deletedClient.name} deleted`
+                `Client <${deletedClient.name}> deleted`,
+                ctx.session.user.id
             );
         }),
 
@@ -345,7 +357,8 @@ export const clientsRouter = createTRPCRouter({
             await logsService.createLog(
                 'TELEGRAM',
                 'INFO',
-                `VPN keys sent for client ${foundClient.name}`
+                `VPN keys sent for client <${foundClient.name}>`,
+                ctx.session.user.id
             );
         }),
 
@@ -373,7 +386,8 @@ export const clientsRouter = createTRPCRouter({
                 await logsService.createLog(
                     'TELEGRAM',
                     'WARNING',
-                    `VPN keys not sent for client ${foundClient.name}`
+                    `VPN keys not sent for client <${foundClient.name}>`,
+                    ctx.session.user.id
                 );
                 continue;
             }
@@ -386,7 +400,12 @@ export const clientsRouter = createTRPCRouter({
             );
         }
 
-        await logsService.createLog('TELEGRAM', 'INFO', `VPN keys sent for clients`);
+        await logsService.createLog(
+            'TELEGRAM',
+            'INFO',
+            `VPN keys sent for clients`,
+            ctx.session.user.id
+        );
     }),
 
     sendDownloadLinks: protectedProcedureWithRole('ADMIN')
@@ -438,7 +457,8 @@ export const clientsRouter = createTRPCRouter({
             await logsService.createLog(
                 'TELEGRAM',
                 'INFO',
-                `Links sent for client ${foundClient.name}`
+                `Links sent for client <${foundClient.name}>`,
+                ctx.session.user.id
             );
         }),
 
@@ -483,7 +503,8 @@ export const clientsRouter = createTRPCRouter({
                 await logsService.createLog(
                     'TELEGRAM',
                     'INFO',
-                    `Mass notification sent to ${validClients.length} ${language.toLowerCase()} clients`
+                    `Mass notification sent to ${validClients.length} ${language.toLowerCase()} clients`,
+                    ctx.session.user.id
                 );
             } else {
                 const foundClient = await ctx.db.clients.findUnique({
@@ -510,7 +531,8 @@ export const clientsRouter = createTRPCRouter({
                 await logsService.createLog(
                     'TELEGRAM',
                     'INFO',
-                    `Notification sent to client ${foundClient.name}`
+                    `Notification sent to client <${foundClient.name}>`,
+                    ctx.session.user.id
                 );
             }
         }),
@@ -546,7 +568,8 @@ export const clientsRouter = createTRPCRouter({
             await logsService.createLog(
                 'CLIENT',
                 'INFO',
-                `Dates of config were changed for client ${foundClient.name}`
+                `Dates of config were changed for client <${foundClient.name}>`,
+                ctx.session.user.id
             );
         }),
 
@@ -587,7 +610,8 @@ export const clientsRouter = createTRPCRouter({
             await logsService.createLog(
                 'CLIENT',
                 'INFO',
-                `Statuses of config were changed for client ${foundClient.name}`
+                `Statuses of config were changed for client <${foundClient.name}>`,
+                ctx.session.user.id
             );
         }),
 });

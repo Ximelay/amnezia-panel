@@ -1,5 +1,6 @@
 import { upsertPaymentSettingsSchema } from '@/lib/schemas/payment-settings';
 import { createTRPCRouter, protectedProcedureWithRole } from '../trpc';
+import { logsService } from '@/server/services/logs';
 
 export const paymentSettingsRouter = createTRPCRouter({
     getPaymentSettings: protectedProcedureWithRole('ADMIN').query(async ({ ctx }) => {
@@ -19,7 +20,6 @@ export const paymentSettingsRouter = createTRPCRouter({
                 adminTelegramIds,
             } = input;
 
-            // Parse adminTelegramIds: split by commas, trim, filter out empty strings
             let parsedAdminIds: string[] | null = null;
             if (adminTelegramIds && adminTelegramIds.trim() !== '') {
                 parsedAdminIds = adminTelegramIds
@@ -36,7 +36,7 @@ export const paymentSettingsRouter = createTRPCRouter({
                     additionalPrice: Number(additionalPrice),
                     defaultConfigsCount: Number(defaultConfigsCount),
                     paymentLink,
-                    adminTelegramIds: parsedAdminIds as any, // store as JSON array
+                    adminTelegramIds: parsedAdminIds as any,
                 },
                 update: {
                     defaultPrice: Number(defaultPrice),
@@ -46,5 +46,12 @@ export const paymentSettingsRouter = createTRPCRouter({
                     adminTelegramIds: parsedAdminIds as any,
                 },
             });
+
+            await logsService.createLog(
+                'TELEGRAM',
+                'INFO',
+                'Payment settings were saved successfully',
+                ctx.session.user.id
+            );
         }),
 });

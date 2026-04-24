@@ -12,7 +12,12 @@ export const adminsRouter = createTRPCRouter({
             const { id, login, password } = input;
 
             if (login === 'root_reseted') {
-                await logsService.createLog('ADMIN', 'ERROR', `Dont use login ${login} for admin`);
+                await logsService.createLog(
+                    'ADMIN',
+                    'ERROR',
+                    `Dont use login <${login}> for admin`,
+                    ctx.session.user.id
+                );
 
                 throw new TRPCError({
                     code: 'BAD_REQUEST',
@@ -22,7 +27,12 @@ export const adminsRouter = createTRPCRouter({
 
             if (id) {
                 if (id === ctx.session.user.id) {
-                    await logsService.createLog('ADMIN', 'ERROR', `Root cant update yourself`);
+                    await logsService.createLog(
+                        'ADMIN',
+                        'ERROR',
+                        `Root cant update yourself`,
+                        ctx.session.user.id
+                    );
 
                     throw new TRPCError({
                         code: 'BAD_REQUEST',
@@ -39,13 +49,15 @@ export const adminsRouter = createTRPCRouter({
             } else {
                 const existingAdmin = await ctx.db.admins.findUnique({
                     where: { login },
+                    select: { login: true },
                 });
 
                 if (existingAdmin) {
                     await logsService.createLog(
                         'ADMIN',
                         'ERROR',
-                        `Admin ${login} is already existing`
+                        `Admin <${login}> is already existing`,
+                        ctx.session.user.id
                     );
 
                     throw new TRPCError({
@@ -67,7 +79,8 @@ export const adminsRouter = createTRPCRouter({
                 await logsService.createLog(
                     'ADMIN',
                     'INFO',
-                    `Admin ${login} was created successfully`
+                    `Admin <${login}> was created successfully`,
+                    ctx.session.user.id
                 );
             }
         }),
@@ -82,7 +95,12 @@ export const adminsRouter = createTRPCRouter({
             });
 
             if (!foundUser) {
-                await logsService.createLog('ADMIN', 'ERROR', `User with id ${id} not found`);
+                await logsService.createLog(
+                    'ADMIN',
+                    'ERROR',
+                    `User with id <${id}> not found`,
+                    ctx.session.user.id
+                );
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
             }
             if (foundUser.role === 'ROOT') {
@@ -97,7 +115,8 @@ export const adminsRouter = createTRPCRouter({
             await logsService.createLog(
                 'ADMIN',
                 'INFO',
-                `Admin ${deletedAdmin.login} was deleted successfully`
+                `Admin <${deletedAdmin.login}> was deleted successfully`,
+                ctx.session.user.id
             );
         }),
     changePassword: protectedProcedure
@@ -115,25 +134,37 @@ export const adminsRouter = createTRPCRouter({
 
             const user = await ctx.db.admins.findUnique({
                 where: { id: userId },
+                select: { login: true, password: true },
             });
 
             if (!user) {
                 await logsService.createLog(
                     'ADMIN',
                     'ERROR',
-                    `User not found for changing password`
+                    `User not found for changing password`,
+                    userId
                 );
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
             }
 
             if ((login || login !== '') && ctx.session.user.role !== 'ROOT') {
-                await logsService.createLog('ADMIN', 'WARNING', `Admin ${login} cant update login`);
+                await logsService.createLog(
+                    'ADMIN',
+                    'WARNING',
+                    `Admin <${login}> cant update login`,
+                    userId
+                );
                 throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown error' });
             }
 
             if (login && ctx.session.user.role === 'ROOT') {
                 if (login === 'root_reseted') {
-                    await logsService.createLog('ADMIN', 'ERROR', `Root cant update yourself`);
+                    await logsService.createLog(
+                        'ADMIN',
+                        'ERROR',
+                        `Root cant update yourself`,
+                        userId
+                    );
                     throw new TRPCError({
                         code: 'BAD_REQUEST',
                         message: 'Change login',
@@ -142,10 +173,16 @@ export const adminsRouter = createTRPCRouter({
 
                 const foundLogin = await ctx.db.admins.findUnique({
                     where: { login },
+                    select: { login: true },
                 });
 
                 if (foundLogin) {
-                    await logsService.createLog('ADMIN', 'ERROR', `Login is existing`);
+                    await logsService.createLog(
+                        'ADMIN',
+                        'ERROR',
+                        `Login <${foundLogin.login}> is existing`,
+                        userId
+                    );
                     throw new TRPCError({ code: 'CONFLICT', message: 'User is existing' });
                 }
             }
@@ -156,7 +193,8 @@ export const adminsRouter = createTRPCRouter({
                 await logsService.createLog(
                     'ADMIN',
                     'WARNING',
-                    `Current password invalid when changing password`
+                    `Current password of <${user.login}> invalid when changing password`,
+                    userId
                 );
                 throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Password invalid' });
             }
@@ -178,6 +216,13 @@ export const adminsRouter = createTRPCRouter({
                     isFirstLogin: false,
                 },
             });
+
+            await logsService.createLog(
+                'ADMIN',
+                'INFO',
+                `Admin <${user.login}> was changed his password successfully`,
+                userId
+            );
         }),
     getAdmins: protectedProcedureWithRole('ROOT')
         .input(z.object({ search: z.string().optional() }))
@@ -202,4 +247,9 @@ export const adminsRouter = createTRPCRouter({
                 },
             });
         }),
+    getAdminsForLogs: protectedProcedureWithRole('ADMIN').query(async ({ ctx }) => {
+        return await ctx.db.admins.findMany({
+            select: { id: true, login: true },
+        });
+    }),
 });

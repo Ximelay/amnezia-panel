@@ -42,7 +42,12 @@ export const configsRouter = createTRPCRouter({
                 },
             });
 
-            await logsService.createLog('CLIENT', 'INFO', `Config ${clientName} created`);
+            await logsService.createLog(
+                'CLIENT',
+                'INFO',
+                `Config <${clientName}> created`,
+                ctx.session.user.id
+            );
         }),
 
     updateClientConfig: protectedProcedureWithRole('ADMIN')
@@ -59,7 +64,8 @@ export const configsRouter = createTRPCRouter({
             await logsService.createLog(
                 'CLIENT',
                 'INFO',
-                `Config ${updatedConfig.clientName} updated`
+                `Config <${updatedConfig.clientName}> updated`,
+                ctx.session.user.id
             );
         }),
 
@@ -89,7 +95,8 @@ export const configsRouter = createTRPCRouter({
             await logsService.createLog(
                 'CLIENT',
                 'WARNING',
-                `Config ${deletedConfig?.clientName || 'that does not exist in database'} deleted`
+                `Config <${deletedConfig?.clientName || 'that does not exist in database'}> deleted`,
+                ctx.session.user.id
             );
         }),
 
@@ -162,7 +169,8 @@ Expiration date: <b>${expiryDate}</b>
             await logsService.createLog(
                 'TELEGRAM',
                 'INFO',
-                `VPN key of ${foundConfig?.clientName} sent`
+                `VPN key of <${foundConfig?.clientName}> sent`,
+                ctx.session.user.id
             );
         }),
 
@@ -195,7 +203,8 @@ Expiration date: <b>${expiryDate}</b>
             await logsService.createLog(
                 'CLIENT',
                 'INFO',
-                `Config ${foundConfig.clientName} date was changed`
+                `Config <${foundConfig.clientName}> date was changed`,
+                ctx.session.user.id
             );
         }),
 
@@ -229,7 +238,8 @@ Expiration date: <b>${expiryDate}</b>
             await logsService.createLog(
                 'CLIENT',
                 'INFO',
-                `Config ${foundConfig.clientName} status was changed`
+                `Config <${foundConfig.clientName}> status was changed`,
+                ctx.session.user.id
             );
         }),
 });

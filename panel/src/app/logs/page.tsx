@@ -74,8 +74,11 @@ export default function LogsPage() {
     const [search, setSearch] = useState('');
     const [activeLevelType, setActiveLevelType] = useState(optionsLevelTypes[0]?.value || '');
     const [activeLogType, setActiveLogType] = useState(optionsLogTypes[0]?.value || '');
+    const [activeAdminFilter, setActiveAdminFilter] = useState('All');
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState('25');
+
+    const { data: admins } = api.admins.getAdminsForLogs.useQuery();
 
     const { data, isLoading, isFetching, error } = api.servers.getLogs.useQuery({
         search,
@@ -83,6 +86,7 @@ export default function LogsPage() {
         limit,
         levelType: activeLevelType,
         logType: activeLogType,
+        adminIdFilter: activeAdminFilter,
     });
 
     const numberLimit = Number(limit);
@@ -101,6 +105,18 @@ export default function LogsPage() {
         };
     }, []);
 
+    const adminsOptions = useMemo(() => {
+        const allOption = { value: 'All', label: 'All' };
+        if (!admins || admins.length === 0) return [allOption];
+        return [
+            allOption,
+            ...admins.map((admin) => ({
+                value: String(admin.id),
+                label: admin.login,
+            })),
+        ];
+    }, [admins]);
+
     return (
         <div className="space-y-6">
             <div className="grid gap-2">
@@ -114,51 +130,71 @@ export default function LogsPage() {
                     <CardDescription>Logs count: {data?.totalItems}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-muted-foreground mb-2">
-                        Note: Click on the message to open the log
-                    </p>
                     <div className="grid gap-6">
-                        <div className="flex items-center gap-4">
-                            <InputSearchLoader
-                                onChange={debouncedChangeHandler}
-                                isLoading={isLoading || isFetching}
-                                placeholder="Search by message..."
-                            />
-                            <div className="flex items-center gap-2">
-                                Log type:
-                                <Select
-                                    onValueChange={(value) => setActiveLogType(value)}
-                                    defaultValue="All">
-                                    <SelectTrigger className="w-50">
-                                        <SelectValue placeholder="Log type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {optionsLogTypes.map((el) => (
-                                            <SelectItem key={el.value} value={el.value}>
-                                                {el.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                Level type:
-                                <Select
-                                    onValueChange={(value) => setActiveLevelType(value)}
-                                    defaultValue="All">
-                                    <SelectTrigger className="w-50">
-                                        <SelectValue placeholder="Level type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {optionsLevelTypes.map((el) => (
-                                            <SelectItem key={el.value} value={el.value}>
-                                                {el.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                        <div className="grid gap-2">
+                            <p className="text-muted-foreground">
+                                Note: Click on the message to open the log
+                            </p>
+                            <div className="flex items-center gap-4">
+                                <InputSearchLoader
+                                    onChange={debouncedChangeHandler}
+                                    isLoading={isLoading || isFetching}
+                                    placeholder="Search by message..."
+                                />
+                                <div className="flex items-center gap-2">
+                                    Admin:
+                                    <Select
+                                        onValueChange={(value) => setActiveAdminFilter(value)}
+                                        defaultValue="All">
+                                        <SelectTrigger className="w-50">
+                                            <SelectValue placeholder="Admin" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {adminsOptions.map((el) => (
+                                                <SelectItem key={el.value} value={el.value}>
+                                                    {el.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    Log type:
+                                    <Select
+                                        onValueChange={(value) => setActiveLogType(value)}
+                                        defaultValue="All">
+                                        <SelectTrigger className="w-50">
+                                            <SelectValue placeholder="Log type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {optionsLogTypes.map((el) => (
+                                                <SelectItem key={el.value} value={el.value}>
+                                                    {el.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    Level type:
+                                    <Select
+                                        onValueChange={(value) => setActiveLevelType(value)}
+                                        defaultValue="All">
+                                        <SelectTrigger className="w-50">
+                                            <SelectValue placeholder="Level type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {optionsLevelTypes.map((el) => (
+                                                <SelectItem key={el.value} value={el.value}>
+                                                    {el.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
                         </div>
+
                         {isLoading ? (
                             <Loader />
                         ) : error ? (
@@ -172,6 +208,7 @@ export default function LogsPage() {
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>Date</TableHead>
+                                                <TableHead>Admin</TableHead>
                                                 <TableHead>Log type</TableHead>
                                                 <TableHead>Level type</TableHead>
                                                 <TableHead>Message</TableHead>
@@ -180,8 +217,11 @@ export default function LogsPage() {
                                         <TableBody>
                                             {data?.logs.map((log) => (
                                                 <TableRow key={log.id}>
-                                                    <TableCell className="font-medium">
+                                                    <TableCell>
                                                         {getNormalDate(log.createdAt)}
+                                                    </TableCell>
+                                                    <TableCell className="font-medium">
+                                                        {log.Admins?.login || ''}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Badge

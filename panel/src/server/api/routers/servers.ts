@@ -40,10 +40,11 @@ export const serversRouter = createTRPCRouter({
                 limit: z.string(),
                 levelType: z.string() as z.ZodType<LevelTypesFilter>,
                 logType: z.string() as z.ZodType<LogTypes>,
+                adminIdFilter: z.string(),
             })
         )
-        .query(async ({ input }) => {
-            return await logsService.getLogs(input);
+        .query(async ({ input, ctx }) => {
+            return await logsService.getLogs(input, ctx.session.user.id);
         }),
 
     downloadBackup: protectedProcedureWithRole('ADMIN')
@@ -74,7 +75,8 @@ export const serversRouter = createTRPCRouter({
             await logsService.createLog(
                 'SERVER',
                 'INFO',
-                'Server backup was downloaded successfully'
+                'Server backup was downloaded successfully',
+                ctx.session.user.id
             );
 
             return {
@@ -86,7 +88,7 @@ export const serversRouter = createTRPCRouter({
 
     importBackup: protectedProcedureWithRole('ADMIN')
         .input(z.object({ serverId: z.number(), fileContent: z.string() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
             const { serverId, fileContent } = input;
 
             const backupFile = await (async () => {
@@ -94,7 +96,12 @@ export const serversRouter = createTRPCRouter({
                     const parsed = JSON.parse(fileContent);
                     return serverBackupSchema.parse(parsed);
                 } catch {
-                    await logsService.createLog('SERVER', 'ERROR', 'Server backup was not parsed');
+                    await logsService.createLog(
+                        'SERVER',
+                        'ERROR',
+                        'Server backup was not parsed',
+                        ctx.session.user.id
+                    );
 
                     throw new TRPCError({
                         code: 'BAD_REQUEST',
@@ -108,33 +115,44 @@ export const serversRouter = createTRPCRouter({
             await logsService.createLog(
                 'SERVER',
                 'INFO',
-                'Server backup was imported successfully'
+                'Server backup was imported successfully',
+                ctx.session.user.id
             );
         }),
 
     rebootServer: protectedProcedureWithRole('ADMIN')
         .input(z.object({ serverId: z.number() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
             const { serverId } = input;
 
-            await logsService.createLog('SERVER', 'WARNING', 'Server was rebooted');
+            await logsService.createLog(
+                'SERVER',
+                'WARNING',
+                'Server was rebooted',
+                ctx.session.user.id
+            );
 
             await amneziaApiService.rebootServer(serverId);
         }),
 
     upsertServer: protectedProcedureWithRole('ADMIN')
         .input(upsertServerSchema)
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
             const { id, name } = input;
 
             await serversCacheService.upsertServer(input, id);
 
-            await logsService.createLog('SERVER', 'INFO', `Server ${name} was saved`);
+            await logsService.createLog(
+                'SERVER',
+                'INFO',
+                `Server <${name}> was saved`,
+                ctx.session.user.id
+            );
         }),
 
     deleteServer: protectedProcedureWithRole('ADMIN')
         .input(z.object({ id: z.number() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
             const { id } = input;
 
             const deletedServerName = await serversCacheService.deleteServer(id);
@@ -142,7 +160,8 @@ export const serversRouter = createTRPCRouter({
             await logsService.createLog(
                 'SERVER',
                 'WARNING',
-                `Server ${deletedServerName} was deleted with configs`
+                `Server <${deletedServerName}> was deleted with configs`,
+                ctx.session.user.id
             );
         }),
 

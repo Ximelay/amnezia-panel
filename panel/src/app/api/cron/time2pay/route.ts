@@ -104,7 +104,7 @@ It's ${calculatedTotalPrice()}₽ for ${client.configsCount} devices`;
                 await logsService.createLog(
                     'TELEGRAM',
                     'INFO',
-                    `${client.name} was notified about payment successfully`
+                    `Client <${client.name}> was notified about payment successfully`
                 );
 
                 clientSummaries.push({
@@ -116,7 +116,7 @@ It's ${calculatedTotalPrice()}₽ for ${client.configsCount} devices`;
                 await logsService.createLog(
                     'TELEGRAM',
                     'WARNING',
-                    `${client.name} was not notified about payment cause without telegramId`
+                    `Client <${client.name}> was not notified about payment cause without telegramId`
                 );
             }
         }
