@@ -221,7 +221,7 @@ export default function LogsPage() {
                                                         {getNormalDate(log.createdAt)}
                                                     </TableCell>
                                                     <TableCell className="font-medium">
-                                                        {log.Admins?.login || ''}
+                                                        {log.Admins?.login || '—'}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Badge
