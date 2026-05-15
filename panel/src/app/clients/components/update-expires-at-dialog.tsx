@@ -29,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { Calendar } from '@/components/ui/calendar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { DialogDescription } from '@radix-ui/react-dialog';
 
 interface Props {
     id: string;
@@ -139,6 +140,7 @@ export function UpdateExpiresAtDialog({ id, expiresAt, isClient, trigger }: Prop
                     <DialogTitle>
                         Change date for {isClient ? 'client configs' : 'config'}
                     </DialogTitle>
+                    <DialogDescription />
                 </DialogHeader>
 
                 <Form {...form}>
