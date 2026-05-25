@@ -120,11 +120,17 @@ export function UpdateExpiresAtDialog({ id, expiresAt, isClient, trigger }: Prop
     );
 
     const setQuickDate = (monthsToAdd: number) => {
-        const now = new Date();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         const numberExpiresAt = Number(expiresAt);
 
-        const newDate = addMonths(new Date(expiresAt ? numberExpiresAt * 1000 : now), monthsToAdd);
+        const newDate = addMonths(
+            new Date(expiresAt ? numberExpiresAt * 1000 : today),
+            monthsToAdd
+        );
         const unixTimestamp = Math.floor(newDate.getTime() / 1000).toString();
+        
         form.setValue('expiresAt', unixTimestamp, {
             shouldValidate: true,
             shouldDirty: true,

@@ -138,9 +138,12 @@ export default function CreateClientPage() {
     };
 
     const setQuickDate = (monthsToAdd: number, index: number) => {
-        const now = new Date();
-        const newDate = addMonths(now, monthsToAdd);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const newDate = addMonths(today, monthsToAdd);
         const unixTimestamp = Math.floor(newDate.getTime() / 1000).toString();
+
         form.setValue(`configs.${index}.expiresAt`, unixTimestamp, {
             shouldValidate: true,
             shouldDirty: true,
