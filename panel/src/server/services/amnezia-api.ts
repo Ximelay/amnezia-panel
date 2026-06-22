@@ -10,6 +10,7 @@ import type {
     ServerBackup,
     ServerBackupZod,
     GetServerLoadResponse,
+    IGenerateQrCodeResponse,
 } from '../interfaces/amnezia-api';
 import { serversCacheService, type ICachedServer } from './cache/servers-cache';
 
@@ -266,7 +267,7 @@ class AmneziaApiService {
         clientId: string, // configId
         protocol: Protocol,
         expiresAt?: string,
-        status?: string,
+        status?: string
     ): Promise<MessageResponse> {
         try {
             return await this.makeRequestWithRetry<MessageResponse>(serverId, 'clients', 'PATCH', {
@@ -326,6 +327,32 @@ class AmneziaApiService {
                     message: `Failed to delete config: ${error instanceof Error ? error.message : 'Unknown error'}`,
                 });
             }
+        }
+    }
+
+    async generateQrCode(serverId: number, vpnKey: string): Promise<IGenerateQrCodeResponse> {
+        try {
+            return await this.makeRequestWithRetry<IGenerateQrCodeResponse>(
+                serverId,
+                'clients/qr',
+                'POST',
+                { config: vpnKey }
+            );
+        } catch (error) {
+            await logsService.createLog(
+                'SERVER',
+                'ERROR',
+                `Failed to generate QR Code: ${error instanceof TRPCError || error instanceof Error ? error.message : 'Unknown error'}`
+            );
+
+            if (error instanceof TRPCError) {
+                throw error;
+            }
+
+            throw new TRPCError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: `Failed to generate QR Code: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            });
         }
     }
 

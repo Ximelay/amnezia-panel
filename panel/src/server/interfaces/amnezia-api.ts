@@ -37,6 +37,11 @@ export interface CreateClientResponse {
     };
 }
 
+export interface IGenerateQrCodeResponse {
+    total: number;
+    items: string[];
+}
+
 export interface MessageResponse {
     message: string;
 }

@@ -242,4 +242,23 @@ Expiration date: <b>${expiryDate}</b>
                 ctx.session.user.id
             );
         }),
+
+    generateQrCode: protectedProcedureWithRole('ADMIN')
+        .input(z.object({ id: z.string().min(1) }))
+        .query(async ({ ctx, input }) => {
+            const { id } = input;
+
+            const foundConfig = await ctx.db.configs.findUnique({
+                where: { id },
+                select: { serverId: true, vpnKey: true },
+            });
+            if (!foundConfig)
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Config not found' });
+
+            const decryptedVpnKey = encryptionService.decryptField(foundConfig.vpnKey);
+            if (!decryptedVpnKey)
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'VPN Config not found' });
+
+            return await amneziaApiService.generateQrCode(foundConfig.serverId, decryptedVpnKey);
+        }),
 });
