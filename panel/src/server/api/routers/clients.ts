@@ -95,22 +95,17 @@ export const clientsRouter = createTRPCRouter({
                         expiresAt: 'asc',
                     },
                 }),
-
                 ctx.db.clients.findMany({
                     where: {
                         Configs: {
                             some: { serverId },
                         },
                     },
-                    include: { Configs: { select: { expiresAt: true } } },
+                    include: {
+                        Configs: { select: { expiresAt: true } },
+                    },
                 }),
             ]);
-
-            clients?.sort((a, b) => {
-                const getMin = (client: typeof a) =>
-                    Math.min(...client.Configs.map((c) => new Date(c.expiresAt!).getTime()));
-                return getMin(a) - getMin(b);
-            });
 
             const mergedConfigs = configsFromDb.map((config) => {
                 const apiDevice = apiDevicesMap.get(config.id);
@@ -138,6 +133,7 @@ export const clientsRouter = createTRPCRouter({
                     traffic: { received: 0, sent: 0 },
                     allowedIps: [],
                     endpoint: null,
+                    expiresAt: config.expiresAt,
                     source: 'db',
                 };
             });
@@ -185,15 +181,33 @@ export const clientsRouter = createTRPCRouter({
             const configsByClientId = new Map<string, typeof filteredConfigs>();
             for (const config of filteredConfigs) {
                 const clientId = String(config.clientId);
-                if (clientId) {
-                    if (!configsByClientId.has(clientId)) {
-                        configsByClientId.set(clientId, []);
-                    }
+
+                if (clientId && clientId !== 'null') {
+                    if (!configsByClientId.has(clientId)) configsByClientId.set(clientId, []);
+
                     configsByClientId.get(clientId)!.push(config);
                 }
             }
 
-            const clientsWithConfigs = clients.map((client) => {
+            const sortedClients = (clients || []).sort((a, b) => {
+                const getMinExpiry = (client: typeof a) => {
+                    const configs = configsByClientId.get(String(client.id)) || [];
+
+                    const timestamps = configs
+                        .map((c) => {
+                            if (!c.expiresAt) return null;
+                            const ts = new Date(c.expiresAt).getTime();
+                            return isNaN(ts) ? null : ts;
+                        })
+                        .filter((t): t is number => t !== null);
+
+                    return timestamps.length ? Math.min(...timestamps) : Infinity;
+                };
+
+                return getMinExpiry(a) - getMinExpiry(b);
+            });
+
+            const clientsWithConfigs = sortedClients.map((client) => {
                 const clientConfigs = configsByClientId.get(String(client.id)) || [];
                 return {
                     id: client.id,
