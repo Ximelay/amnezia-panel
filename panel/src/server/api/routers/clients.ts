@@ -92,23 +92,25 @@ export const clientsRouter = createTRPCRouter({
                         status: true,
                     },
                     orderBy: {
-                        createdAt: 'desc',
+                        expiresAt: 'asc',
                     },
                 }),
 
                 ctx.db.clients.findMany({
                     where: {
                         Configs: {
-                            some: {
-                                serverId,
-                            },
+                            some: { serverId },
                         },
                     },
-                    orderBy: {
-                        name: 'asc',
-                    },
+                    include: { Configs: { select: { expiresAt: true } } },
                 }),
             ]);
+
+            clients?.sort((a, b) => {
+                const getMin = (client: typeof a) =>
+                    Math.min(...client.Configs.map((c) => new Date(c.expiresAt!).getTime()));
+                return getMin(a) - getMin(b);
+            });
 
             const mergedConfigs = configsFromDb.map((config) => {
                 const apiDevice = apiDevicesMap.get(config.id);
