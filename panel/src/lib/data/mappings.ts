@@ -1,9 +1,22 @@
 import { Languages, LevelTypes, LogTypes, Protocols, Roles } from 'prisma/generated/enums';
 
 export const protocolsMapping: Record<Protocols, string> = {
-    [Protocols.AMNEZIAWG2]: 'AmneziaWG 2.0',
+    // 2.0 and 3.x are one protocol as far as the API and the container are concerned;
+    // which of the two a config actually is only becomes known once it is issued.
+    [Protocols.AMNEZIAWG2]: 'AmneziaWG 2.0 / 3.x',
     [Protocols.AMNEZIAWG]: 'AmneziaWG',
     [Protocols.XRAY]: 'XRAY',
+};
+
+/**
+ * Names a config's protocol as precisely as what is known about it allows: exact once
+ * the version was read out of the issued config, the ambiguous pair until then.
+ */
+export const protocolLabel = (protocol: Protocols, version?: string | null): string => {
+    if (protocol !== Protocols.AMNEZIAWG2 || !version) return protocolsMapping[protocol];
+
+    // The API reports 2.0 as a bare "2", which reads oddly next to "3.1".
+    return `AmneziaWG ${version === '2' ? '2.0' : version}`;
 };
 
 export const protocolsApiMapping: Record<Protocols, 'amneziawg' | 'amneziawg2' | 'xray'> = {
@@ -13,7 +26,7 @@ export const protocolsApiMapping: Record<Protocols, 'amneziawg' | 'amneziawg2' |
 };
 
 export const protocolsServerMapping: Record<string, string> = {
-    amneziawg2: 'AmneziaWG 2.0',
+    amneziawg2: 'AmneziaWG 2.0 / 3.x',
     amneziawg: 'AmneziaWG',
     xray: 'XRAY',
 };

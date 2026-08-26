@@ -1,0 +1,27 @@
+# Local development: database only.
+# The panel itself runs on the host via `yarn dev`, so it can talk to a remote
+# Amnezia API while the schema is iterated on locally.
+#
+#   docker compose -f docker-compose.dev.yaml up -d
+#
+services:
+    db:
+        image: postgres:17
+        container_name: db-amnezia-panel-dev
+        environment:
+            POSTGRES_USER: panel
+            POSTGRES_PASSWORD: panel
+            POSTGRES_DB: panel
+        ports:
+            # 5433 on the host to avoid clashing with a local PostgreSQL install.
+            - '5433:5432'
+        volumes:
+            - db_data_dev:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U panel -d panel']
+            interval: 5s
+            timeout: 5s
+            retries: 10
+
+volumes:
+    db_data_dev:

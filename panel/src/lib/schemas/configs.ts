@@ -24,3 +24,11 @@ export const updateExpiresAtSchema = z.object({
 });
 
 export type updateExpiresAtFormData = z.infer<typeof updateExpiresAtSchema>;
+
+export const reissueConfigSchema = z.object({
+    id: z.string().min(1),
+    // Falls back to the expiration date of the config being replaced.
+    expiresAt: z.string().min(1).optional(),
+});
+
+export type reissueConfigFormData = z.infer<typeof reissueConfigSchema>;

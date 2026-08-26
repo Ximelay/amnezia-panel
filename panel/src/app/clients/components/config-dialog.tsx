@@ -38,7 +38,7 @@ import { cn, formatBytes, formatLastHandshake, getProtocolColor } from '@/lib/ut
 import { toast } from 'sonner';
 import { api } from '@/trpc/react';
 import type { Protocols } from 'prisma/generated/enums';
-import { protocolsMapping } from '@/lib/data/mappings';
+import { protocolLabel } from '@/lib/data/mappings';
 import { format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import Image from 'next/image';
@@ -48,6 +48,7 @@ interface ConfigInfoDialogProps {
         id: string;
         clientName: string;
         protocol: Protocols;
+        protocolVersion: string | null;
         online: boolean;
         lastHandshake: string | null;
         traffic: {
@@ -198,7 +199,7 @@ export function ConfigDialog({ config }: ConfigInfoDialogProps) {
                                 <Badge
                                     variant="default"
                                     className={getProtocolColor(config.protocol)}>
-                                    {protocolsMapping[config.protocol]}
+                                    {protocolLabel(config.protocol, config.protocolVersion)}
                                 </Badge>
                             </div>
 

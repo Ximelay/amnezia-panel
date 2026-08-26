@@ -27,14 +27,19 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'PaymentSettings not found' }, { status: 400 });
 
         const MSK_OFFSET = 3 * 60 * 60 * 1000; // Change time zone if u need
-        const now = new Date();
-        const nowMSK = new Date(now.getTime() + MSK_OFFSET);
-        const startOfTodayMSK = new Date(
-            Date.UTC(nowMSK.getUTCFullYear(), nowMSK.getUTCMonth(), nowMSK.getUTCDate())
+        const nowMSK = new Date(Date.now() + MSK_OFFSET);
+
+        // Subtracting the offset turns midnight of an MSK calendar day into the real UTC
+        // instant it happens at; Date.UTC rolls the month and year over on its own.
+        const startOfTomorrowMSK = new Date(
+            Date.UTC(nowMSK.getUTCFullYear(), nowMSK.getUTCMonth(), nowMSK.getUTCDate() + 1) -
+                MSK_OFFSET
         );
-        const startOfTomorrowMSK = new Date(startOfTodayMSK.getTime() + 24 * 60 * 60 * 1000);
-        const startTimestamp = Math.floor(startOfTodayMSK.getTime() / 1000);
-        const endTimestamp = Math.floor(startOfTomorrowMSK.getTime() / 1000);
+        const endOfTomorrowMSK = new Date(startOfTomorrowMSK.getTime() + 24 * 60 * 60 * 1000);
+
+        // Configs expiring tomorrow, so the notice arrives while there is still a day to act.
+        const startTimestamp = Math.floor(startOfTomorrowMSK.getTime() / 1000);
+        const endTimestamp = Math.floor(endOfTomorrowMSK.getTime() / 1000);
 
         const foundClients: ClientWithExpiringCount[] = await db.$queryRaw`
             SELECT 
@@ -85,12 +90,17 @@ export async function POST(req: NextRequest) {
                     }
                 };
 
+                const paymentLine =
+                    client.language === Languages.RUSSIAN
+                        ? `\n\nПродление — ${calculatedTotalPrice()}₽. <a href="${foundPaymentSettings.paymentLink}">Оплатить</a>`
+                        : `\n\nRenewal is ${calculatedTotalPrice()}₽. <a href="${foundPaymentSettings.paymentLink}">Pay</a>`;
+
                 const message =
                     client.language === Languages.RUSSIAN
-                        ? `🕘 Время <a href="${foundPaymentSettings.paymentLink}">платить</a> за VPN.
-С вас ${calculatedTotalPrice()}₽ за ${client.configsCount} ${devicesWord()}`
-                        : `🕘 Time to <a href="${foundPaymentSettings.paymentLink}">pay</a> for VPN.
-It's ${calculatedTotalPrice()}₽ for ${client.configsCount} devices`;
+                        ? `⏳ Завтра истекает ваш VPN — ${client.configsCount} ${devicesWord()}.
+После этого подключение перестанет работать.${foundPaymentSettings.paymentLink ? paymentLine : ''}`
+                        : `⏳ Your VPN expires tomorrow — ${client.configsCount} devices.
+After that the connection will stop working.${foundPaymentSettings.paymentLink ? paymentLine : ''}`;
 
                 await telegramService.sendMessage(
                     {
@@ -127,11 +137,15 @@ It's ${calculatedTotalPrice()}₽ for ${client.configsCount} devices`;
             foundPaymentSettings.adminTelegramIds.length > 0 &&
             clientSummaries.length > 0
         ) {
-            const todayDate = startOfTodayMSK.toLocaleDateString('en-US');
+            // Rendered in UTC so the label matches the MSK calendar day regardless of
+            // whatever timezone the server itself runs in.
+            const expiryDate = new Date(
+                Date.UTC(nowMSK.getUTCFullYear(), nowMSK.getUTCMonth(), nowMSK.getUTCDate() + 1)
+            ).toLocaleDateString('en-US', { timeZone: 'UTC' });
             const totalRevenue = clientSummaries.reduce((sum, c) => sum + c.totalPrice, 0);
 
-            let adminMessage = `<b>📊 Payment Reminder Summary for ${todayDate}</b>\n\n`;
-            adminMessage += `<b>Clients with expiring configurations (total: ${clientSummaries.length}):</b>\n`;
+            let adminMessage = `<b>📊 Configs expiring on ${expiryDate}</b>\n\n`;
+            adminMessage += `<b>Clients notified (total: ${clientSummaries.length}):</b>\n`;
 
             clientSummaries.forEach((c, idx) => {
                 const deviceText = c.configsCount === 1 ? 'device' : 'devices';

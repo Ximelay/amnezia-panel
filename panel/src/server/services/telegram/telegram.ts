@@ -1,4 +1,8 @@
-import type { SendMessageParams, TelegramMessageResponse } from '@/server/interfaces/telegram';
+import type {
+    SendMessageParams,
+    TelegramMessageResponse,
+    TelegramUpdate,
+} from '@/server/interfaces/telegram';
 import { TRPCError, type TRPC_ERROR_CODE_KEY } from '@trpc/server';
 import { logsService } from '../logs';
 
@@ -59,7 +63,17 @@ class TelegramService {
         body?: any
     ): Promise<T> {
         if (process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT !== 'true')
-            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Not found Bot Token' });
+            throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message:
+                    'Telegram is disabled. Set NEXT_PUBLIC_USES_TELEGRAM_BOT="true" in .env and restart the app',
+            });
+
+        if (!process.env.TELEGRAM_BOT_TOKEN)
+            throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: 'TELEGRAM_BOT_TOKEN is not set in .env',
+            });
 
         const url = `${this.baseUrl}/${endpoint}`;
 
@@ -186,6 +200,38 @@ class TelegramService {
             throw new TRPCError({
                 code: 'INTERNAL_SERVER_ERROR',
                 message: `Failed to send document for client ${clientName}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            });
+        }
+    }
+
+    /**
+     * Polled on demand rather than from a long-running bot process.
+     *
+     * Offsets are deliberately never confirmed: Telegram keeps unconfirmed updates for
+     * 24 hours, and several clients may have a pending deep link at the same time, so
+     * consuming them here would make one lookup hide another.
+     */
+    async getUpdates(): Promise<TelegramUpdate[]> {
+        try {
+            return await this.makeRequestWithRetry<TelegramUpdate[]>(
+                'getUpdates',
+                this.getFetchOptions(),
+                { timeout: 0, allowed_updates: ['message'] }
+            );
+        } catch (error) {
+            await logsService.createLog(
+                'TELEGRAM',
+                'ERROR',
+                `Failed to get updates: ${error instanceof TRPCError || error instanceof Error ? error.message : 'Unknown error'}`
+            );
+
+            if (error instanceof TRPCError) {
+                throw error;
+            }
+
+            throw new TRPCError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: `Failed to get updates: ${error instanceof Error ? error.message : 'Unknown error'}`,
             });
         }
     }

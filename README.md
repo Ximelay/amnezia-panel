@@ -7,6 +7,56 @@ A modern web administration panel for AmneziaVPN, built with Next.js App Router,
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+
+Запуск:
+
+1. `cd panel`
+2. `docker compose -f docker-compose.dev.yaml up -d`
+3. `corepack yarn dev`
+4. `corepack yarn prisma db push`
+5. `curl -X POST http://localhost:3000/api/auth/setup-root \
+    -H "Authorization: Bearer dev-root-secret"`
+
+
+Для связки сервера-мак использовать:
+
+`ssh -N -L 4001:127.0.0.1:4001 root@<ip-тестового-сервера>`
+
+ip: 127.0.0.1
+port: 4001
+ключ в тг
+
+Рестартнуть контейнеры на сервере:
+1. `cd amnezia-api`
+2. `docker compose -f docker-compose.ghcr.yml up -d --force-recreate`
+
+
+### Если всё пошло по пизде:
+
+Узнать логи:
+`docker logs --tail 20 amnezia-api`
+
+#### Возможные причины:
+1. Включить только нужные протоколы
+* `PROTOCOLS_ENABLED=amneziawg2`
+
+2. Узнать `DOCKER_API_VERSION`
+* `docker version --format '{{.Server.APIVersion}}'`
+* и записать в `.env`-файл `echo "DOCKER_API_VERSION=1.51" >> .env`
+
+Проверка: `docker compose -f docker-compose.ghcr.yml config | grep DOCKER_API_VERSION`
+
+3. Поменять GID
+* `getent group docker | cut -d: -f3 `
+* `echo "DOCKER_GID=112" >> .env`
+
+**После любого исправления рестартнуть контейнеры:**
+* `docker compose -f docker-compose.ghcr.yml up -d --force-recreate`
+
+### Если порты заняты
+1. `lsof -nP -iTCP:3000 -sTCP:LISTEN`
+2. `lsof -ti:3000 | xargs kill -9`
+
 > **API Project:** [Amnezia API](https://github.com/kyoresuas/amnezia-api) - Required backend service
 
 ## Overview

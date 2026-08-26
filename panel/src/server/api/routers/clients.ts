@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import crypto from 'node:crypto';
 
 import { createTRPCRouter, protectedProcedureWithRole } from '@/server/api/trpc';
 import type { ProtocolsFilter } from '@/server/enums';
@@ -17,6 +18,12 @@ import { TRPCError } from '@trpc/server';
 import { sendConfigsToTelegram } from '@/server/services/telegram/telegram-messages';
 import { telegramService } from '@/server/services/telegram/telegram';
 import { updateExpiresAtSchema } from '@/lib/schemas/configs';
+import { Protocols } from 'prisma/generated/enums';
+import { readProtocolVersion } from '@/server/services/vpn-config';
+
+// Telegram keeps unconfirmed updates for 24 hours, so a longer link would outlive the
+// update it is meant to be matched against.
+const TELEGRAM_LINK_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const clientsRouter = createTRPCRouter({
     getClients: protectedProcedureWithRole('ADMIN')
@@ -87,6 +94,7 @@ export const clientsRouter = createTRPCRouter({
                         clientName: true,
                         expiresAt: true,
                         protocol: true,
+                        protocolVersion: true,
                         clientId: true,
                         serverId: true,
                         status: true,
@@ -107,12 +115,61 @@ export const clientsRouter = createTRPCRouter({
                 }),
             ]);
 
+            // Rows created before the version was recorded still carry it inside their
+            // encrypted key, so fill them in once instead of leaving a permanent gap.
+            const missingVersion = configsFromDb.filter(
+                (config) => !config.protocolVersion && config.protocol === Protocols.AMNEZIAWG2
+            );
+
+            if (missingVersion.length) {
+                const storedKeys = await ctx.db.configs.findMany({
+                    where: { id: { in: missingVersion.map((config) => config.id) } },
+                    select: { id: true, vpnKey: true },
+                });
+                const keysById = new Map(storedKeys.map((row) => [row.id, row.vpnKey]));
+
+                await Promise.all(
+                    missingVersion.map(async (config) => {
+                        let version: string | null = null;
+
+                        try {
+                            version = readProtocolVersion(
+                                encryptionService.decryptField(keysById.get(config.id))
+                            );
+                        } catch {
+                            // A key written under a different ENCRYPTION_KEY is not
+                            // something a listing should fail on.
+                        }
+
+                        if (!version) return;
+
+                        config.protocolVersion = version;
+                        await ctx.db.configs.update({
+                            where: { id: config.id },
+                            data: { protocolVersion: version },
+                        });
+                    })
+                );
+            }
+
+            // The API exposes no server-side version, so the most recently issued config
+            // stands in for what this server currently hands out. Anything older than
+            // that was issued before the server was upgraded.
+            const serverProtocolVersion =
+                [...configsFromDb]
+                    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+                    .find((config) => config.protocolVersion)?.protocolVersion ?? null;
+
+            const isOutdated = (version: string | null) =>
+                !!version && !!serverProtocolVersion && version !== serverProtocolVersion;
+
             const mergedConfigs = configsFromDb.map((config) => {
                 const apiDevice = apiDevicesMap.get(config.id);
 
                 if (apiDevice) {
                     return {
                         ...config,
+                        protocolOutdated: isOutdated(config.protocolVersion),
                         status: apiDevice.status === 'active' ? true : false,
                         online: apiDevice.online,
                         lastHandshake: String(apiDevice.lastHandshake),
@@ -127,6 +184,7 @@ export const clientsRouter = createTRPCRouter({
 
                 return {
                     ...config,
+                    protocolOutdated: isOutdated(config.protocolVersion),
                     status: false,
                     online: false,
                     lastHandshake: null,
@@ -151,6 +209,10 @@ export const clientsRouter = createTRPCRouter({
                             ? String(apiDevice.device.expiresAt)
                             : null,
                         protocol: apiProtocolsMapping[apiDevice.device.protocol],
+                        // Configs that exist only on the server were never issued through
+                        // the panel, so there is no stored key to read a version out of.
+                        protocolVersion: null,
+                        protocolOutdated: false,
                         clientId: null,
                         serverId,
                         online: apiDevice.device.online,
@@ -353,8 +415,14 @@ export const clientsRouter = createTRPCRouter({
                 },
             });
 
-            if (!foundClient || !foundClient.telegramId)
+            if (!foundClient)
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
+
+            if (!foundClient.telegramId)
+                throw new TRPCError({
+                    code: 'BAD_REQUEST',
+                    message: 'Client has no Telegram chat id yet, bind one with the link button',
+                });
 
             if (foundClient.Configs.length === 0) {
                 throw new TRPCError({
@@ -629,5 +697,136 @@ export const clientsRouter = createTRPCRouter({
                 `Statuses of config were changed for client <${foundClient.name}>`,
                 ctx.session.user.id
             );
+        }),
+
+    /**
+     * Returns the still-valid deep link for a client, if one is pending. Without this the
+     * dialog would forget an issued link as soon as it is closed, and the admin would have
+     * to reissue it — invalidating the payload the client may already have pressed Start on.
+     */
+    getTelegramLink: protectedProcedureWithRole('ADMIN')
+        .input(z.object({ id: z.number().min(1) }))
+        .query(async ({ ctx, input }) => {
+            const foundClient = await ctx.db.clients.findUnique({
+                where: { id: input.id },
+                select: { telegramLinkToken: true, telegramLinkExpiresAt: true },
+            });
+
+            if (!foundClient?.telegramLinkToken || !foundClient.telegramLinkExpiresAt) return null;
+            if (foundClient.telegramLinkExpiresAt.getTime() < Date.now()) return null;
+
+            const bot = await telegramService.getMe();
+            if (!bot?.username) return null;
+
+            return {
+                url: `https://t.me/${bot.username}?start=${foundClient.telegramLinkToken}`,
+                expiresAt: foundClient.telegramLinkExpiresAt.toISOString(),
+            };
+        }),
+
+    /**
+     * Issues a t.me deep link carrying a single-use payload. When the client presses Start,
+     * Telegram delivers "/start <payload>" to the bot, which lets syncTelegramLink match the
+     * chat id to this exact client without anyone having to look up a username by hand.
+     */
+    generateTelegramLink: protectedProcedureWithRole('ADMIN')
+        .input(z.object({ id: z.number().min(1) }))
+        .mutation(async ({ ctx, input }) => {
+            const { id } = input;
+
+            const foundClient = await ctx.db.clients.findUnique({
+                where: { id },
+                select: { name: true },
+            });
+            if (!foundClient)
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
+
+            // base64url keeps the payload inside Telegram's [A-Za-z0-9_-] limit.
+            const token = crypto.randomBytes(9).toString('base64url');
+            const expiresAt = new Date(Date.now() + TELEGRAM_LINK_TTL_MS);
+
+            const bot = await telegramService.getMe();
+            if (!bot?.username)
+                throw new TRPCError({
+                    code: 'INTERNAL_SERVER_ERROR',
+                    message: 'Could not resolve the bot username',
+                });
+
+            await ctx.db.clients.update({
+                where: { id },
+                data: { telegramLinkToken: token, telegramLinkExpiresAt: expiresAt },
+            });
+
+            await logsService.createLog(
+                'TELEGRAM',
+                'INFO',
+                `Telegram link issued for client <${foundClient.name}>`,
+                ctx.session.user.id
+            );
+
+            return {
+                url: `https://t.me/${bot.username}?start=${token}`,
+                expiresAt: expiresAt.toISOString(),
+            };
+        }),
+
+    /**
+     * Looks for the pending payload among recent bot updates and binds the chat id.
+     * Returns bound:false rather than throwing when the client simply has not pressed
+     * Start yet, since that is the expected state right after the link is sent.
+     */
+    syncTelegramLink: protectedProcedureWithRole('ADMIN')
+        .input(z.object({ id: z.number().min(1) }))
+        .mutation(async ({ ctx, input }) => {
+            const { id } = input;
+
+            const foundClient = await ctx.db.clients.findUnique({
+                where: { id },
+                select: { name: true, telegramLinkToken: true, telegramLinkExpiresAt: true },
+            });
+            if (!foundClient)
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
+
+            if (!foundClient.telegramLinkToken)
+                throw new TRPCError({
+                    code: 'BAD_REQUEST',
+                    message: 'No pending link for this client, generate one first',
+                });
+
+            if (
+                foundClient.telegramLinkExpiresAt &&
+                foundClient.telegramLinkExpiresAt.getTime() < Date.now()
+            )
+                throw new TRPCError({
+                    code: 'BAD_REQUEST',
+                    message: 'The link has expired, generate a new one',
+                });
+
+            const updates = await telegramService.getUpdates();
+            const expected = `/start ${foundClient.telegramLinkToken}`;
+            const match = updates.find((update) => update.message?.text?.trim() === expected);
+
+            if (!match?.message) return { bound: false as const };
+
+            const telegramId = String(match.message.chat.id);
+
+            await ctx.db.clients.update({
+                where: { id },
+                data: { telegramId, telegramLinkToken: null, telegramLinkExpiresAt: null },
+            });
+
+            await logsService.createLog(
+                'TELEGRAM',
+                'INFO',
+                `Telegram chat bound to client <${foundClient.name}>`,
+                ctx.session.user.id
+            );
+
+            return {
+                bound: true as const,
+                telegramId,
+                username: match.message.chat.username ?? null,
+                firstName: match.message.chat.first_name ?? null,
+            };
         }),
 });

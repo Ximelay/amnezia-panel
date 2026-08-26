@@ -18,6 +18,7 @@ import {
     Copy,
     Loader2,
     Send,
+    TriangleAlert,
     UserIcon,
 } from 'lucide-react';
 import {
@@ -31,8 +32,10 @@ import {
 import type { Languages, Protocols } from 'prisma/generated/enums';
 import { UpdateClientDialog } from './client-dialog';
 import DeleteClientDialog from './delete-client-dialog';
-import { protocolsMapping } from '@/lib/data/mappings';
+import TelegramLinkDialog from './telegram-link-dialog';
+import { protocolLabel } from '@/lib/data/mappings';
 import DeleteConfigDialog from './delete-config-dialog';
+import ReissueConfigDialog from './reissue-config-dialog';
 import { ConfigDialog } from './config-dialog';
 import { api } from '@/trpc/react';
 import { toast } from 'sonner';
@@ -54,6 +57,8 @@ interface ConfigsWithClientsProps {
             id: string;
             clientName: string;
             protocol: Protocols;
+            protocolVersion: string | null;
+            protocolOutdated: boolean;
             online: boolean;
             status: boolean;
             lastHandshake: string | null;
@@ -73,6 +78,8 @@ interface ConfigsWithClientsProps {
         id: string;
         clientName: string;
         protocol: Protocols;
+        protocolVersion: string | null;
+        protocolOutdated: boolean;
         online: boolean;
         status: boolean;
         lastHandshake: string | null;
@@ -159,6 +166,8 @@ function ClientRow({
             id: string;
             clientName: string;
             protocol: Protocols;
+            protocolVersion: string | null;
+            protocolOutdated: boolean;
             status: boolean;
             online: boolean;
             lastHandshake: string | null;
@@ -181,6 +190,13 @@ function ClientRow({
     const utils = api.useUtils();
 
     const [copiedChatId, setCopiedChatId] = useState(false);
+
+    // Collapsed rows hide the per-config badges, so the count has to surface here or an
+    // upgraded server would leave stale configs invisible until someone expands a row.
+    const outdatedConfigsCount = useMemo(
+        () => client.configs.filter((config) => config.protocolOutdated).length,
+        [client.configs]
+    );
 
     const configsWord = useMemo(() => {
         const count = client.configsCount;
@@ -309,6 +325,27 @@ function ClientRow({
                             </div>
                         </Button>
 
+                        {outdatedConfigsCount > 0 && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Badge
+                                        variant="outline"
+                                        className="cursor-help border-amber-500/40 text-xs whitespace-nowrap text-amber-600 dark:text-amber-400">
+                                        <TriangleAlert className="mr-1 h-3 w-3" />
+                                        {outdatedConfigsCount}
+                                    </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>
+                                        {outdatedConfigsCount} of this client&apos;s configs
+                                        were issued on an older protocol version than the
+                                        server now hands out. Expand the row to reissue
+                                        them.
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        )}
+
                         {client.telegramId && (
                             <Badge
                                 variant="outline"
@@ -396,6 +433,11 @@ function ClientRow({
                             clientName={client.name}
                             serverId={selectedServerId}
                         />
+                        <TelegramLinkDialog
+                            id={client.id}
+                            name={client.name}
+                            telegramId={client.telegramId}
+                        />
                         <UpdateClientDialog
                             id={client.id}
                             name={client.name}
@@ -423,6 +465,8 @@ function ConfigRow({
         id: string;
         clientName: string;
         protocol: Protocols;
+        protocolVersion: string | null;
+        protocolOutdated: boolean;
         online: boolean;
         status: boolean;
         lastHandshake: string | null;
@@ -471,6 +515,8 @@ function ConfigRow({
     const onToggleStatus = (newStatus: boolean) => {
         updateStatus.mutate({
             id: config.id,
+            serverId: config.serverId,
+            protocol: config.protocol,
             status: newStatus ? 'active' : 'disabled',
         });
     };
@@ -513,9 +559,25 @@ function ConfigRow({
                 </div>
             </TableCell>
             <TableCell>
-                <Badge variant="default" className={getProtocolColor(config.protocol)}>
-                    {protocolsMapping[config.protocol]}
-                </Badge>
+                <div className="flex items-center gap-1.5">
+                    <Badge variant="default" className={getProtocolColor(config.protocol)}>
+                        {protocolLabel(config.protocol, config.protocolVersion)}
+                    </Badge>
+                    {config.protocolOutdated && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <TriangleAlert className="h-4 w-4 shrink-0 cursor-help text-amber-500" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>
+                                    Issued on an older protocol version than this server
+                                    now hands out. Reissue it to bring the client up to
+                                    date.
+                                </p>
+                            </TooltipContent>
+                        </Tooltip>
+                    )}
+                </div>
             </TableCell>
             <TableCell>{formatLastHandshake(config.lastHandshake)}</TableCell>
             <TableCell>{formatBytes(totalTraffic)}</TableCell>
@@ -543,6 +605,7 @@ function ConfigRow({
                         </Tooltip>
                     )}
                     <ConfigDialog config={config} />
+                    <ReissueConfigDialog id={config.id} clientName={config.clientName} />
                     <DeleteConfigDialog
                         id={config.id}
                         serverId={config.serverId}

@@ -36,6 +36,10 @@ model Clients {
     telegramId String?
     status     Boolean   @default(true)
     Configs    Configs[]
+
+    // Single-use payload for a t.me deep link, cleared once the chat id is bound.
+    telegramLinkToken     String?   @unique
+    telegramLinkExpiresAt DateTime?
 }
 
 model Configs {
@@ -46,6 +50,10 @@ model Configs {
     expiresAt  String?
     status     Boolean   @default(true)
     protocol   Protocols
+    // AmneziaWG 2.0 and 3.x share one API protocol, so the concrete version is only
+    // known from the config the server hands back ("2", "3.1"). Null for rows created
+    // before this was recorded, and for protocols that carry no version.
+    protocolVersion String?
     clientId   Int?
     serverId   Int
     Clients    Clients?  @relation(fields: [clientId], references: [id])

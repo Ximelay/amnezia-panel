@@ -48,6 +48,24 @@ export interface TelegramChat {
     last_name?: string;
 }
 
+export interface TelegramBotInfo {
+    id: number;
+    is_bot: boolean;
+    first_name: string;
+    username: string;
+}
+
+export interface TelegramUpdate {
+    update_id: number;
+    message?: {
+        message_id: number;
+        from?: TelegramUser;
+        chat: TelegramChat;
+        date: number;
+        text?: string;
+    };
+}
+
 export interface WebhookInfo {
     url: string;
     has_custom_certificate: boolean;
