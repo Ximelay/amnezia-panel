@@ -16,6 +16,7 @@ import type { IPeer } from '@/server/interfaces/amnezia-api';
 import { logsService } from '@/server/services/logs';
 import { TRPCError } from '@trpc/server';
 import { sendConfigsToTelegram } from '@/server/services/telegram/telegram-messages';
+import { purgeKeyMessagesForClient } from '@/server/services/telegram/key-messages';
 import { telegramService } from '@/server/services/telegram/telegram';
 import { updateExpiresAtSchema } from '@/lib/schemas/configs';
 import { Protocols } from 'prisma/generated/enums';
@@ -380,6 +381,20 @@ export const clientsRouter = createTRPCRouter({
                 where: { clientId: id },
             });
 
+            // Before the client row goes: its keys are dead now, so the messages carrying
+            // them are pure liability. Failing here must not abort the deletion itself.
+            let purged: Awaited<ReturnType<typeof purgeKeyMessagesForClient>> | null = null;
+            try {
+                purged = await purgeKeyMessagesForClient(id);
+            } catch (error) {
+                await logsService.createLog(
+                    'TELEGRAM',
+                    'WARNING',
+                    `Could not withdraw sent keys while deleting client ${id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    ctx.session.user.id
+                );
+            }
+
             const deletedClient = await ctx.db.clients.delete({
                 where: { id },
                 select: { name: true },
@@ -391,6 +406,14 @@ export const clientsRouter = createTRPCRouter({
                 `Client <${deletedClient.name}> deleted`,
                 ctx.session.user.id
             );
+
+            if (purged && purged.expired > 0)
+                await logsService.createLog(
+                    'TELEGRAM',
+                    'WARNING',
+                    `${purged.expired} key message(s) of <${deletedClient.name}> stayed in Telegram: older than 48 hours and no longer deletable by the bot`,
+                    ctx.session.user.id
+                );
         }),
 
     sendKeysForClient: protectedProcedureWithRole('ADMIN')
@@ -406,6 +429,7 @@ export const clientsRouter = createTRPCRouter({
                     language: true,
                     Configs: {
                         select: {
+                            id: true,
                             vpnKey: true,
                             clientName: true,
                             protocol: true,
@@ -435,7 +459,8 @@ export const clientsRouter = createTRPCRouter({
                 foundClient.name,
                 foundClient.telegramId,
                 foundClient.language,
-                foundClient.Configs
+                foundClient.Configs,
+                id
             );
 
             await logsService.createLog(
@@ -449,11 +474,13 @@ export const clientsRouter = createTRPCRouter({
     sendAllKeys: protectedProcedureWithRole('ADMIN').mutation(async ({ ctx }) => {
         const foundClients = await ctx.db.clients.findMany({
             select: {
+                id: true,
                 name: true,
                 telegramId: true,
                 language: true,
                 Configs: {
                     select: {
+                        id: true,
                         vpnKey: true,
                         clientName: true,
                         protocol: true,
@@ -480,7 +507,8 @@ export const clientsRouter = createTRPCRouter({
                 foundClient.name,
                 foundClient.telegramId,
                 foundClient.language,
-                foundClient.Configs
+                foundClient.Configs,
+                foundClient.id
             );
         }
 

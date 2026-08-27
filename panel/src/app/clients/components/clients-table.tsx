@@ -17,6 +17,7 @@ import {
     ChevronRightIcon,
     Copy,
     Loader2,
+    MessageSquareX,
     Send,
     TriangleAlert,
     UserIcon,
@@ -501,6 +502,32 @@ function ConfigRow({
         sendMessage.mutate({ id: config.id });
     };
 
+    const purgeSentKeys = api.configs.purgeSentKeys.useMutation({
+        onSuccess: ({ deleted, expired, failed }) => {
+            if (deleted === 0 && expired === 0 && failed === 0) {
+                toast.info('Nothing to delete: this key was never sent to Telegram');
+                return;
+            }
+
+            if (deleted > 0)
+                toast.success(
+                    `Deleted ${deleted} message${deleted === 1 ? '' : 's'} from the client chat`
+                );
+
+            // Telegram lets a bot delete its own message for 48 hours only, after which
+            // the key is stuck in the chat and reissuing is the only real remedy.
+            if (expired > 0)
+                toast.warning(
+                    `${expired} message${expired === 1 ? '' : 's'} older than 48 hours stayed in the chat — reissue the config instead`
+                );
+
+            if (failed > 0) toast.error(`${failed} message(s) could not be deleted, try again`);
+        },
+        onError: (error) => {
+            telegramToastError(error);
+        },
+    });
+
     const updateStatus = api.configs.updateStatus.useMutation({
         onSuccess: () => {
             toast.success('Status was changed successfully');
@@ -601,6 +628,31 @@ function ConfigRow({
                             </TooltipTrigger>
                             <TooltipContent>
                                 <p>Send config to Telegram</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    )}
+                    {process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT === 'true' && isNested && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="cursor-pointer text-amber-500 hover:text-amber-600"
+                                    onClick={() => purgeSentKeys.mutate({ id: config.id })}
+                                    disabled={purgeSentKeys.isPending}>
+                                    {purgeSentKeys.isPending ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <MessageSquareX className="h-4 w-4" />
+                                    )}
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>
+                                    Delete this key from the client&apos;s Telegram chat.
+                                    Only works within 48 hours of sending, and does not
+                                    revoke access — reissue the config for that.
+                                </p>
                             </TooltipContent>
                         </Tooltip>
                     )}

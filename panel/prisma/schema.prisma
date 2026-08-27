@@ -60,6 +60,25 @@ model Configs {
     Servers    Servers   @relation(fields: [serverId], references: [id])
 }
 
+/// Bot messages that carry a VPN key, tracked so they can be removed from the client's
+/// chat later. Telegram refuses to delete anything sent more than 48 hours ago, so a row
+/// is only actionable inside that window.
+model TelegramKeyMessages {
+    id        Int       @id @default(autoincrement())
+    createdAt DateTime  @default(now())
+    chatId    String
+    messageId Int
+    // One message can carry up to three keys, so this is a list rather than a relation.
+    // Deliberately not a foreign key: the message has to be deletable from the chat
+    // exactly when the config or client row is already gone.
+    configIds String[]
+    clientId  Int?
+    deletedAt DateTime?
+
+    @@unique([chatId, messageId])
+    @@index([deletedAt, createdAt])
+}
+
 model Logs {
     id        Int        @id @default(autoincrement())
     createdAt DateTime   @default(now())

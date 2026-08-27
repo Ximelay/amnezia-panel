@@ -458,8 +458,9 @@ EOF
     echo "================================================"
     print_message "Deployment completed successfully!"
     echo ""
-    print_message "Application is available at:"
-    print_message "  https://${APP_HOST}:8443"
+    print_message "Application is published on loopback only. Reach it over an SSH tunnel:"
+    print_message "  ssh -N -L 8443:127.0.0.1:8443 root@${APP_HOST}"
+    print_message "  then open https://localhost:8443"
     echo ""
     print_message "Containers running:"
     docker compose ps

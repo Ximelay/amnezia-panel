@@ -205,6 +205,65 @@ class TelegramService {
     }
 
     /**
+     * Removes a single message from the chat.
+     *
+     * Unlike the other methods this one never throws: a message that cannot be deleted is
+     * a fact about the chat, not a failure of the caller, and the two interesting cases
+     * ("already gone", "past the 48-hour window") are indistinguishable from success as
+     * far as the caller cares — in both the key is no longer worth chasing.
+     *
+     * Returns whether the message is definitely no longer in the chat. `false` means the
+     * attempt failed for a transient reason and is worth repeating.
+     */
+    async deleteMessage(chatId: string | number, messageId: number): Promise<boolean> {
+        try {
+            await this.makeRequestWithRetry('deleteMessage', this.getFetchOptions(), {
+                chat_id: chatId,
+                message_id: messageId,
+            });
+            return true;
+        } catch (error) {
+            return this.isTerminalDeleteError(error);
+        }
+    }
+
+    /**
+     * Same as `deleteMessage` for up to 100 messages of one chat in a single call.
+     * Telegram skips ids it cannot find, so a partially stale batch still succeeds.
+     */
+    async deleteMessages(chatId: string | number, messageIds: number[]): Promise<boolean> {
+        if (messageIds.length === 0) return true;
+
+        try {
+            await this.makeRequestWithRetry('deleteMessages', this.getFetchOptions(), {
+                chat_id: chatId,
+                message_ids: messageIds.slice(0, 100),
+            });
+            return true;
+        } catch (error) {
+            return this.isTerminalDeleteError(error);
+        }
+    }
+
+    /**
+     * Distinguishes "Telegram will never delete this" from "try again later". Only the
+     * former lets the caller stop tracking the message.
+     */
+    private isTerminalDeleteError(error: unknown): boolean {
+        const description = error instanceof Error ? error.message.toLowerCase() : '';
+
+        return (
+            description.includes('message to delete not found') ||
+            description.includes("message can't be deleted") ||
+            description.includes('message identifier is not specified') ||
+            // The chat itself is unreachable: blocked bot, deleted account, wrong id.
+            description.includes('chat not found') ||
+            description.includes('bot was blocked') ||
+            description.includes('user is deactivated')
+        );
+    }
+
+    /**
      * Polled on demand rather than from a long-running bot process.
      *
      * Offsets are deliberately never confirmed: Telegram keeps unconfirmed updates for

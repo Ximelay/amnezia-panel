@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { telegramService } from './telegram';
+import { recordKeyMessage } from './key-messages';
 import { encryptionService } from '../encryption';
 import { format } from 'date-fns';
 import { protocolsMapping } from '@/lib/data/mappings';
@@ -7,6 +8,7 @@ import type { Languages, Protocols } from 'prisma/generated/enums';
 import type { JsonValue } from '@prisma/client/runtime/client';
 
 interface TelegramConfig {
+    id: string;
     clientName: string;
     expiresAt: string | null;
     protocol: Protocols;
@@ -99,7 +101,8 @@ export async function sendConfigsToTelegram(
     clientName: string,
     telegramId: string,
     language: Languages,
-    configs?: TelegramConfig[]
+    configs?: TelegramConfig[],
+    clientId?: number | null
 ) {
     if (!configs) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Error' });
 
@@ -125,13 +128,20 @@ export async function sendConfigsToTelegram(
         });
 
         try {
-            await telegramService.sendMessage(
+            const sent = await telegramService.sendMessage(
                 {
                     chatId: telegramId,
                     text: message,
                     parseMode: 'HTML',
                 },
                 clientName
+            );
+
+            await recordKeyMessage(
+                telegramId,
+                sent.message_id,
+                currentGroup.map((config) => config.id),
+                clientId
             );
         } catch (error: any) {
             if (
@@ -147,7 +157,7 @@ export async function sendConfigsToTelegram(
                         language,
                     });
 
-                    await telegramService.sendMessage(
+                    const sent = await telegramService.sendMessage(
                         {
                             chatId: telegramId,
                             text: singleMessage,
@@ -155,6 +165,8 @@ export async function sendConfigsToTelegram(
                         },
                         clientName
                     );
+
+                    await recordKeyMessage(telegramId, sent.message_id, [config.id], clientId);
                 }
             } else {
                 throw error;

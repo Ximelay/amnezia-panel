@@ -17,6 +17,51 @@ import { logsService } from '@/server/services/logs';
 import { Protocols } from 'prisma/generated/enums';
 import { format } from 'date-fns';
 import { telegramService } from '@/server/services/telegram/telegram';
+import {
+    purgeKeyMessagesForConfigs,
+    recordKeyMessage,
+} from '@/server/services/telegram/key-messages';
+
+/**
+ * Takes the key back out of the client's Telegram chat once the config behind it is dead.
+ *
+ * Best effort by design: the config is already revoked on the VPN server by the time this
+ * runs, so a Telegram outage must not turn a successful revocation into an error. What it
+ * cannot do is silently: a key older than 48 hours stays in the chat forever, and that
+ * fact belongs in the log rather than in nobody's head.
+ */
+async function withdrawSentKeys(
+    ctx: { session: { user: { id: string } } },
+    configIds: string[],
+    label: string
+): Promise<void> {
+    try {
+        const purged = await purgeKeyMessagesForConfigs(configIds);
+
+        if (purged.deleted > 0)
+            await logsService.createLog(
+                'TELEGRAM',
+                'INFO',
+                `${purged.deleted} Telegram message(s) with the key of <${label}> deleted from the client chat`,
+                ctx.session.user.id
+            );
+
+        if (purged.expired > 0)
+            await logsService.createLog(
+                'TELEGRAM',
+                'WARNING',
+                `${purged.expired} Telegram message(s) with the key of <${label}> stayed in the client chat: older than 48 hours and no longer deletable by the bot`,
+                ctx.session.user.id
+            );
+    } catch (error) {
+        await logsService.createLog(
+            'TELEGRAM',
+            'WARNING',
+            `Could not withdraw the sent key of <${label}> from Telegram: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            ctx.session.user.id
+        );
+    }
+}
 
 export const configsRouter = createTRPCRouter({
     createConfig: protectedProcedureWithRole('ADMIN')
@@ -96,6 +141,8 @@ export const configsRouter = createTRPCRouter({
                 });
             }
 
+            await withdrawSentKeys(ctx, [id], deletedConfig?.clientName ?? id);
+
             await logsService.createLog(
                 'CLIENT',
                 'WARNING',
@@ -129,7 +176,7 @@ export const configsRouter = createTRPCRouter({
                     clientName: true,
                     expiresAt: true,
                     protocol: true,
-                    Clients: { select: { name: true, telegramId: true, language: true } },
+                    Clients: { select: { id: true, name: true, telegramId: true, language: true } },
                 },
             });
             if (!foundConfig)
@@ -161,7 +208,7 @@ Expiration date: <b>${expiryDate}</b>
 Дата истечения: <b>${expiryDate}</b>
 <code>${decryptedVpnKey}</code>`;
 
-            await telegramService.sendMessage(
+            const sent = await telegramService.sendMessage(
                 {
                     chatId: foundConfig.Clients.telegramId,
                     text: message,
@@ -170,12 +217,50 @@ Expiration date: <b>${expiryDate}</b>
                 foundConfig.Clients.name
             );
 
+            await recordKeyMessage(
+                foundConfig.Clients.telegramId,
+                sent.message_id,
+                [id],
+                foundConfig.Clients.id
+            );
+
             await logsService.createLog(
                 'TELEGRAM',
                 'INFO',
                 `VPN key of <${foundConfig?.clientName}> sent`,
                 ctx.session.user.id
             );
+        }),
+
+    /**
+     * Deletes the messages that delivered this key from the client's Telegram chat, for
+     * when a key was sent to the wrong person or the chat is no longer trusted.
+     *
+     * Removing the message does not revoke access — anyone who already copied the key can
+     * keep using it. Pair it with a reissue when the key is actually compromised.
+     */
+    purgeSentKeys: protectedProcedureWithRole('ADMIN')
+        .input(z.object({ id: z.string() }))
+        .mutation(async ({ ctx, input }) => {
+            const { id } = input;
+
+            const foundConfig = await ctx.db.configs.findUnique({
+                where: { id },
+                select: { clientName: true },
+            });
+            if (!foundConfig)
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Config not found' });
+
+            const purged = await purgeKeyMessagesForConfigs([id]);
+
+            await logsService.createLog(
+                'TELEGRAM',
+                purged.expired > 0 || purged.failed > 0 ? 'WARNING' : 'INFO',
+                `Sent keys of <${foundConfig.clientName}> withdrawn from Telegram: ${purged.deleted} deleted, ${purged.expired} too old, ${purged.failed} failed`,
+                ctx.session.user.id
+            );
+
+            return purged;
         }),
 
     /**
@@ -273,6 +358,10 @@ Expiration date: <b>${expiryDate}</b>
             } catch {
                 // The key alone is enough to hand over, the QR code is a convenience.
             }
+
+            // The point of a reissue is that the old key is compromised or broken, so
+            // leaving it readable in the chat defeats the exercise.
+            await withdrawSentKeys(ctx, [id], oldConfig.clientName);
 
             await logsService.createLog(
                 'CLIENT',
