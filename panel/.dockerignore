@@ -1,6 +1,9 @@
 node_modules
 .next
 .git
+# Regenerated inside the build from the schema. Letting a host copy in means the image
+# can end up with a client that predates the schema it was built against.
+prisma/generated
 .env
 **/.env
 **/*.local

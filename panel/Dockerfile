@@ -16,6 +16,15 @@ RUN yarn install --frozen-lockfile --ignore-scripts; \
     yarn next telemetry disable;
 
 COPY . .
+
+# The generated client is gitignored, and the install above skips postinstall scripts, so
+# nothing else produces it. Without this the build silently uses whatever copy happens to
+# sit in the build context — which is how a schema change first shows up as a type error
+# about a model that plainly exists.
+#
+# `generate` never opens a connection; prisma.config.ts only insists the variable is set.
+RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" yarn prisma generate
+
 RUN yarn build
 
 FROM node:24-alpine
