@@ -27,7 +27,13 @@ fi
 
 mkdir -p ${BACKUP_DIR}
 
-if ! docker exec db-amnezia-panel pg_dump --inserts --column-inserts -U ${DB_USER} ${DB_NAME} > "${BACKUP_FILE}"; then
+# Logs and the Telegram message ledger are the only tables that grow without bound, and
+# neither is worth restoring: one is an audit trail, the other tracks messages that are
+# meaningless once their keys are gone. Excluding them is what keeps a dump small enough
+# to justify a monthly cadence. Quotes are doubled because the table names are mixed case.
+if ! docker exec db-amnezia-panel pg_dump --inserts --column-inserts \
+    -T '"Logs"' -T '"TelegramKeyMessages"' \
+    -U ${DB_USER} ${DB_NAME} > "${BACKUP_FILE}"; then
     echo "Error: Failed to create database backup!"
     exit 1
 fi
