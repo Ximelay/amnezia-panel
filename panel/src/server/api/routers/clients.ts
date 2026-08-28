@@ -537,25 +537,25 @@ export const clientsRouter = createTRPCRouter({
                     ? `For using <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> you need to download the open-source AmneziaVPN app.
 
 <b>💻 Computers & Laptops</b>
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.15.4/AmneziaVPN_4.8.15.4_x64.exe">Windows</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.15.4/AmneziaVPN_4.8.15.4_macos.pkg">macOS</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.15.4/AmneziaVPN_4.8.15.4_linux_x64.tar">Linux</a>
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_windows_x64.exe">Windows</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_macos_x64.pkg">macOS</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_linux_x64.run">Linux</a>
 • <a href="https://docs.amnezia.org/documentation/installing-app-on-linux">Linux docs</a>
 
 <b>📱 Smartphones & Tablets</b>
 • <a href="https://play.google.com/store/apps/details?id=org.amnezia.vpn">Android</a>
-• <a href="https://apps.apple.com/us/app/amneziavpn/id1600529900">iPhone / iPad</a>`
+• <a href="https://apps.apple.com/us/app/defaultvpn/id6744725017">iPhone / iPad</a>`
                     : `Для использования <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> вам нужно скачать open-source приложение AmneziaVPN.
 
 <b>💻 Компьютеры и ноутбуки</b>
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.15.4/AmneziaVPN_4.8.15.4_x64.exe">Windows</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.15.4/AmneziaVPN_4.8.15.4_macos.pkg">macOS</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/4.8.15.4/AmneziaVPN_4.8.15.4_linux_x64.tar">Linux</a>
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_windows_x64.exe">Windows</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_macos_x64.pkg">macOS</a> 
+• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_linux_x64.run">Linux</a>
 • <a href="https://docs.amnezia.org/documentation/installing-app-on-linux">Документация для Linux</a>
 
 <b>📱 Смартфоны и планшеты</b>
 • <a href="https://play.google.com/store/apps/details?id=org.amnezia.vpn">Android</a>
-• <a href="https://apps.apple.com/us/app/amneziavpn/id1600529900">iPhone / iPad</a>`;
+• <a href="https://apps.apple.com/us/app/defaultvpn/id6744725017">iPhone / iPad</a>`;
 
             await telegramService.sendMessage(
                 {
