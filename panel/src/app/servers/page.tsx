@@ -18,7 +18,7 @@ import { CustomPagination } from '@/components/custom-pagination';
 import DeleteServerDialog from './components/delete-server-dialog';
 import { UpsertServerDialog } from './components/upsert-server-dialog';
 import { toast } from 'sonner';
-import { Check, Copy, Star } from 'lucide-react';
+import { Check, Copy, Loader2, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function ServersPage() {
@@ -162,7 +162,6 @@ function ServerRow({
         name: string;
         ip: string;
         port: number;
-        apiKey: string | null;
         configsCount: number;
     };
     defaultServerId: number | null;
@@ -170,18 +169,27 @@ function ServerRow({
 }>) {
     const [copiedApiKey, setCopiedApiKey] = useState(false);
 
-    const copyApiKeyToClipboard = async (apiKey: string | null) => {
-        if (!apiKey) return;
-
-        try {
-            await navigator.clipboard.writeText(apiKey);
-            setCopiedApiKey(true);
-            toast.success('API key copied to clipboard');
-            setTimeout(() => setCopiedApiKey(false), 2000);
-        } catch (err) {
-            toast.error('Failed to copy API key');
-        }
-    };
+    // The row never holds the key. It is fetched on the click that copies it, so opening this
+    // page does not put every server's credential into the browser.
+    const revealApiKey = api.servers.revealApiKey.useMutation({
+        onSuccess: async ({ apiKey }) => {
+            try {
+                await navigator.clipboard.writeText(apiKey);
+                setCopiedApiKey(true);
+                toast.success('API key copied to clipboard');
+                setTimeout(() => setCopiedApiKey(false), 2000);
+            } catch {
+                toast.error('Failed to copy API key');
+            }
+        },
+        onError: (error) => {
+            toast.error(
+                error.data?.code === 'FORBIDDEN'
+                    ? 'Only ROOT can reveal API keys'
+                    : 'Failed to load API key'
+            );
+        },
+    });
 
     const isDefault = server.id === defaultServerId;
 
@@ -200,10 +208,17 @@ function ServerRow({
             </TableCell>
             <TableCell>
                 <div
-                    className="flex cursor-pointer items-center gap-1"
-                    onClick={() => copyApiKeyToClipboard(server.apiKey)}>
+                    className="flex w-fit cursor-pointer items-center gap-1"
+                    title="Copy API key to clipboard"
+                    onClick={() => revealApiKey.mutate({ id: server.id })}>
                     <span>********************</span>
-                    {copiedApiKey ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {revealApiKey.isPending ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : copiedApiKey ? (
+                        <Check className="h-3 w-3" />
+                    ) : (
+                        <Copy className="h-3 w-3" />
+                    )}
                 </div>
             </TableCell>
             <TableCell>{server.configsCount}</TableCell>

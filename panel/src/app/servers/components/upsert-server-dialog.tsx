@@ -34,7 +34,6 @@ interface Props {
         name: string;
         ip: string;
         port: number;
-        apiKey: string | null;
     };
     trigger?: React.ReactNode;
 }
@@ -79,7 +78,9 @@ export function UpsertServerDialog({ server, trigger }: Props) {
                 name: server.name,
                 ip: server.ip,
                 port: String(server.port),
-                apiKey: server.apiKey || undefined,
+                // Left blank on purpose: the stored key never reaches the browser, and blank
+                // is what tells the server to keep it.
+                apiKey: '',
             });
         }
     }, [server]);
@@ -160,10 +161,18 @@ export function UpsertServerDialog({ server, trigger }: Props) {
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>
-                                        Amnezia API Key <span className="text-destructive">*</span>
+                                        Amnezia API Key{' '}
+                                        {!server && <span className="text-destructive">*</span>}
                                     </FormLabel>
                                     <FormControl>
-                                        <InputPassword placeholder="Enter API key" {...field} />
+                                        <InputPassword
+                                            placeholder={
+                                                server
+                                                    ? 'Leave empty to keep the current key'
+                                                    : 'Enter API key'
+                                            }
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

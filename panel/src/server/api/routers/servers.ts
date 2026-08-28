@@ -195,7 +195,6 @@ export const serversRouter = createTRPCRouter({
                         name: true,
                         ip: true,
                         port: true,
-                        apiKey: true,
                         _count: { select: { Configs: true } },
                     },
                     orderBy: {
@@ -215,7 +214,6 @@ export const serversRouter = createTRPCRouter({
                 name: server.name,
                 ip: server.ip,
                 port: server.port,
-                apiKey: encryptionService.decryptField(server.apiKey),
                 configsCount: server._count.Configs,
             }));
 
@@ -223,5 +221,48 @@ export const serversRouter = createTRPCRouter({
                 servers: serversWithApi,
                 totalItems,
             };
+        }),
+
+    /**
+     * Hands one server's raw Amnezia API key to the browser, and only on an explicit click.
+     *
+     * That key is the sole credential the Amnezia API accepts: with it, configs on the server
+     * can be listed, created and deleted and the machine rebooted, no panel required. It is
+     * therefore kept out of `getServersTable` — a list query would put every key into the
+     * network log of every admin who so much as opens the page, which is how credentials end
+     * up in HAR exports and screen recordings without anyone noticing.
+     *
+     * ROOT only, a mutation rather than a query so react-query can never refetch it on its
+     * own, and logged, so that a reveal always leaves a trace.
+     */
+    revealApiKey: protectedProcedureWithRole('ROOT')
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ ctx, input }) => {
+            const foundServer = await ctx.db.servers.findUnique({
+                where: { id: input.id },
+                select: { name: true, apiKey: true },
+            });
+
+            if (!foundServer) {
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Server not found' });
+            }
+
+            const apiKey = encryptionService.decryptField(foundServer.apiKey);
+
+            if (!apiKey) {
+                throw new TRPCError({
+                    code: 'NOT_FOUND',
+                    message: 'Server has no API key stored',
+                });
+            }
+
+            await logsService.createLog(
+                'SERVER',
+                'WARNING',
+                `API key for server <${foundServer.name}> was revealed`,
+                ctx.session.user.id
+            );
+
+            return { apiKey };
         }),
 });

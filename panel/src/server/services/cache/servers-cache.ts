@@ -78,13 +78,29 @@ export class ServersCacheService {
     }
 
     async upsertServer(data: upsertServerFormData, serverId?: number): Promise<void> {
-        const encryptedApiKey = encryptionService.encrypt(data.apiKey);
+        const { apiKey, ...fields } = data;
+        const trimmedApiKey = apiKey?.trim();
 
-        await db.servers.upsert({
-            where: { id: serverId || -1 },
-            create: { ...data, port: Number(data.port), apiKey: encryptedApiKey },
-            update: { ...data, port: Number(data.port), apiKey: encryptedApiKey },
-        });
+        if (!trimmedApiKey) {
+            // The edit form leaves this empty whenever the admin is not deliberately replacing
+            // the key — it has no copy to prefill, by design. Writing the empty value through
+            // would encrypt nothing and cut the panel off from the server on the next API call,
+            // so an absent key means "leave the stored one alone" instead.
+            if (!serverId) throw new Error('API key is required when creating a server');
+
+            await db.servers.update({
+                where: { id: serverId },
+                data: { ...fields, port: Number(fields.port) },
+            });
+        } else {
+            const encryptedApiKey = encryptionService.encrypt(trimmedApiKey);
+
+            await db.servers.upsert({
+                where: { id: serverId || -1 },
+                create: { ...fields, port: Number(fields.port), apiKey: encryptedApiKey },
+                update: { ...fields, port: Number(fields.port), apiKey: encryptedApiKey },
+            });
+        }
 
         if (serverId) {
             this.invalidateCacheServerId(serverId);
