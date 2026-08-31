@@ -439,6 +439,24 @@ class TelegramService {
         }
     }
 
+    /**
+     * Publishes the command list Telegram offers when someone types "/".
+     *
+     * `languageCode` selects which of the client's Telegram interface languages the list
+     * applies to; omitting it sets the fallback used for every language without its own
+     * list. Telegram stores this per bot, not per chat, so this is a rare write — see the
+     * fingerprint in the bot's `syncCommands`.
+     */
+    async setMyCommands(
+        commands: { command: string; description: string }[],
+        languageCode?: string
+    ): Promise<void> {
+        await this.makeRequestWithRetry('setMyCommands', this.getFetchOptions(), {
+            commands,
+            language_code: languageCode,
+        });
+    }
+
     async getMe(): Promise<any> {
         try {
             return await this.makeRequestWithRetry('getMe', this.getFetchOptions('GET'));

@@ -103,6 +103,10 @@ model TelegramBotState {
     /// because Prisma hands out a different pooled connection per query, and a
     /// session-scoped lock would then be released by the wrong one.
     lockedUntil DateTime?
+
+    /// Fingerprint of the command list last published to Telegram, so the bot re-registers
+    /// it only when the wording actually changed rather than on every polling run.
+    commandsHash String?
 }
 
 /// Ledger of everything a client asked the bot to do.

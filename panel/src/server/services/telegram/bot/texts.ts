@@ -18,9 +18,39 @@ export function escapeHtml(value: string): string {
     return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/**
+ * The administrator clients should message when the bot cannot help them.
+ *
+ * Read from the environment rather than hard-coded: this panel is a fork others run, and
+ * a handle baked into the source would send their clients to the wrong person. Returns
+ * null when unset, and every use is written so the text still reads correctly without it.
+ */
+export function adminContact(): { handle: string; url: string } | null {
+    const raw = process.env.TELEGRAM_ADMIN_CONTACT?.trim();
+    if (!raw) return null;
+
+    // Accepts "@name", "name" or a full t.me link, so a copied handle works either way.
+    const handle = raw
+        .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '')
+        .replace(/^@/, '')
+        .trim();
+
+    if (!/^[A-Za-z0-9_]{4,32}$/.test(handle)) return null;
+
+    return { handle: `@${handle}`, url: `https://t.me/${handle}` };
+}
+
+export interface BotCommand {
+    command: string;
+    description: string;
+}
+
 interface BotTexts {
+    welcome: (clientName: string) => string;
     greeting: (clientName: string) => string;
     menuHint: string;
+    buttonAdmin: string;
+    commands: BotCommand[];
     unknownChat: string;
     clientDisabled: string;
 
@@ -38,6 +68,9 @@ interface BotTexts {
 
     noConfigs: string;
     configGone: string;
+    configDisabled: string;
+    noActiveConfigs: string;
+    someConfigsDisabled: (count: number) => string;
 
     keysIntro: string;
     keysExpireNotice: (minutes: number) => string;
@@ -65,7 +98,8 @@ interface BotTexts {
 
     rateLimited: (retryAfter: string) => string;
     genericError: string;
-    help: string;
+    helpHeader: string;
+    helpAdmin: (handle: string) => string;
 }
 
 /** Renders a duration as the coarse phrase a person would actually use. */
@@ -87,9 +121,36 @@ export function retryAfterPhrase(ms: number, language: Languages): string {
 }
 
 const RUSSIAN: BotTexts = {
+    welcome: (clientName) => {
+        const admin = adminContact();
+
+        return `👋 Здравствуйте, <b>${escapeHtml(clientName)}</b>!
+
+Это бот <b>${escapeHtml(process.env.NEXT_PUBLIC_VPN_NAME ?? 'VPN')}</b>. Через него вы сами, не дожидаясь администратора, можете:
+
+🔑 <b>Получить свои ключи</b> — текстом, чтобы вставить в приложение AmneziaVPN.
+📱 <b>Получить QR-код</b> — удобнее, если настраиваете телефон.
+ℹ️ <b>Посмотреть сроки</b> — до какого числа работает каждый ключ.
+⚠️ <b>Заменить ключ</b>, если он перестал подключаться. Старый при этом сразу перестаёт работать.
+📥 <b>Скачать приложение</b> для своей системы.
+
+Ключ — это пароль от вашего доступа: у каждого устройства он должен быть свой. Если ключ нужен ещё на одно устройство, попросите отдельный${admin ? ` у ${escapeHtml(admin.handle)}` : ' у администратора'}.
+
+Меню под этим сообщением, а список команд открывается кнопкой «/» рядом с полем ввода.`;
+    },
     greeting: (clientName) =>
         `👋 Здравствуйте, <b>${escapeHtml(clientName)}</b>!\n\nЗдесь можно получить свои ключи ${escapeHtml(process.env.NEXT_PUBLIC_VPN_NAME ?? 'VPN')}, посмотреть сроки и заменить ключ, если он перестал работать.`,
     menuHint: 'Выберите действие кнопкой ниже или отправьте /menu.',
+    buttonAdmin: '✉️ Написать администратору',
+    commands: [
+        { command: 'menu', description: 'Меню' },
+        { command: 'keys', description: 'Прислать мои ключи' },
+        { command: 'qr', description: 'QR-код для настройки' },
+        { command: 'status', description: 'Сроки моих подписок' },
+        { command: 'replace', description: 'Заменить ключ, который не работает' },
+        { command: 'apps', description: 'Скачать приложение' },
+        { command: 'help', description: 'Справка' },
+    ],
     unknownChat:
         'Этот чат не привязан ни к одному пользователю. Попросите администратора прислать вам ссылку для привязки.',
     clientDisabled:
@@ -111,6 +172,12 @@ const RUSSIAN: BotTexts = {
 
     noConfigs: 'У вас пока нет ключей. Обратитесь к администратору.',
     configGone: 'Этот ключ больше не существует. Откройте список заново.',
+    configDisabled:
+        'Этот ключ отключён администратором и сейчас не работает. Напишите администратору, чтобы включить его.',
+    noActiveConfigs:
+        'Все ваши ключи сейчас отключены администратором. Напишите ему, чтобы возобновить доступ.',
+    someConfigsDisabled: (count) =>
+        `🔴 Ещё ${count} ключ(ей) отключено администратором — они не отправлены, потому что работать не будут.`,
 
     keysIntro: 'Отправляю ваши ключи.',
     keysExpireNotice: (minutes) =>
@@ -150,13 +217,42 @@ const RUSSIAN: BotTexts = {
     rateLimited: (retryAfter) =>
         `Слишком часто. Попробуйте снова через ${retryAfter}. Если ключ нужен срочно — напишите администратору.`,
     genericError: 'Что-то пошло не так. Попробуйте ещё раз или напишите администратору.',
-    help: 'Доступные команды:\n/menu — меню\n/keys — прислать ключи\n/status — сроки подписок\n/apps — ссылки на приложение\n/help — эта справка',
+    helpHeader: 'Доступные команды:',
+    helpAdmin: (handle) =>
+        `\n\nНе нашли нужного? Напишите администратору: ${escapeHtml(handle)}`,
 };
 
 const ENGLISH: BotTexts = {
+    welcome: (clientName) => {
+        const admin = adminContact();
+
+        return `👋 Hello, <b>${escapeHtml(clientName)}</b>!
+
+This is the <b>${escapeHtml(process.env.NEXT_PUBLIC_VPN_NAME ?? 'VPN')}</b> bot. It lets you do these yourself, without waiting for an administrator:
+
+🔑 <b>Get your keys</b> — as text, to paste into the AmneziaVPN app.
+📱 <b>Get a QR code</b> — easier when setting up a phone.
+ℹ️ <b>Check expiry dates</b> — how long each key is good for.
+⚠️ <b>Replace a key</b> that stopped connecting. The old one stops working immediately.
+📥 <b>Download the app</b> for your system.
+
+A key is the password to your access, and every device needs its own. If you need one for another device, ask${admin ? ` ${escapeHtml(admin.handle)}` : ' your administrator'} for a separate key.
+
+The menu is below this message, and the full command list opens from the "/" button next to the input field.`;
+    },
     greeting: (clientName) =>
         `👋 Hello, <b>${escapeHtml(clientName)}</b>!\n\nFrom here you can get your ${escapeHtml(process.env.NEXT_PUBLIC_VPN_NAME ?? 'VPN')} keys, check expiry dates and replace a key that stopped working.`,
     menuHint: 'Pick an action below, or send /menu.',
+    buttonAdmin: '✉️ Message the administrator',
+    commands: [
+        { command: 'menu', description: 'Menu' },
+        { command: 'keys', description: 'Send me my keys' },
+        { command: 'qr', description: 'QR code for setup' },
+        { command: 'status', description: 'My subscription dates' },
+        { command: 'replace', description: 'Replace a key that stopped working' },
+        { command: 'apps', description: 'Download the app' },
+        { command: 'help', description: 'Help' },
+    ],
     unknownChat:
         'This chat is not linked to any user. Ask your administrator to send you a linking link.',
     clientDisabled: 'Your access is currently suspended. Contact your administrator to restore it.',
@@ -176,6 +272,12 @@ const ENGLISH: BotTexts = {
 
     noConfigs: 'You have no keys yet. Please contact your administrator.',
     configGone: 'That key no longer exists. Open the list again.',
+    configDisabled:
+        'This key has been switched off by your administrator and will not connect. Message them to have it enabled.',
+    noActiveConfigs:
+        'All of your keys are currently switched off by your administrator. Message them to restore access.',
+    someConfigsDisabled: (count) =>
+        `🔴 ${count} more key(s) are switched off by your administrator — they were not sent, because they would not connect.`,
 
     keysIntro: 'Sending your keys.',
     keysExpireNotice: (minutes) =>
@@ -215,11 +317,28 @@ const ENGLISH: BotTexts = {
     rateLimited: (retryAfter) =>
         `Too often. Try again in ${retryAfter}. If you need a key urgently, message your administrator.`,
     genericError: 'Something went wrong. Try again, or contact your administrator.',
-    help: 'Available commands:\n/menu — the menu\n/keys — send my keys\n/status — subscription dates\n/apps — app download links\n/help — this text',
+    helpHeader: 'Available commands:',
+    helpAdmin: (handle) =>
+        `\n\nNot what you needed? Message the administrator: ${escapeHtml(handle)}`,
 };
 
 export function textsFor(language: Languages): BotTexts {
     return language === 'ENGLISH' ? ENGLISH : RUSSIAN;
+}
+
+/**
+ * Renders /help from the same list that is registered with Telegram, so the typed help
+ * and the "/" dropdown can never describe different commands.
+ */
+export function helpMessage(language: Languages): string {
+    const t = textsFor(language);
+    const admin = adminContact();
+
+    const lines = t.commands.map(
+        (command) => `/${command.command} — ${escapeHtml(command.description)}`
+    );
+
+    return `${t.helpHeader}\n${lines.join('\n')}${admin ? t.helpAdmin(admin.handle) : ''}`;
 }
 
 /**

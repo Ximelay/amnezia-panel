@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { format } from 'date-fns';
 
 import { protocolsMapping } from '@/lib/data/mappings';
@@ -16,7 +18,7 @@ import { getKeyMessageTtlMs } from '../key-messages';
 import { sendConfigsToTelegram } from '../telegram-messages';
 import { telegramService } from '../telegram';
 import { checkQuota, recordAction } from './rate-limit';
-import { appsMessage, retryAfterPhrase, textsFor } from './texts';
+import { adminContact, appsMessage, helpMessage, retryAfterPhrase, textsFor } from './texts';
 import type { Languages } from 'prisma/generated/enums';
 
 /**
@@ -114,24 +116,96 @@ async function listConfigs(clientId: number): Promise<BotConfig[]> {
     })) as BotConfig[];
 }
 
+/** All `liveStatuses` needs to identify a config and fall back when a server is down. */
+type ConfigStatusRef = Pick<BotConfig, 'id' | 'serverId' | 'status'>;
+
+/** Peers are listed a page at a time; this is the page size the panel already uses. */
+const PEER_PAGE_SIZE = 100;
+
+/**
+ * Guards the paging loop below. A server holding more peers than this is well past what
+ * one panel is meant to look after, and a runaway loop would be worse than a stale flag.
+ */
+const MAX_PEER_PAGES = 20;
+
+/**
+ * Asks the VPN servers which of these configs are actually switched on.
+ *
+ * The `Configs.status` column is only a mirror, and it drifts: enabling a client rewrites
+ * it for every config the client owns (`clients.updateStatus`), configs made outside the
+ * panel never had a row, and a write can fail after the server was already changed. The
+ * panel resolves this by treating the server as the source of truth, and the bot has to
+ * agree with the panel — a client being told their key works while the admin sees it
+ * switched off is the one answer that helps nobody.
+ *
+ * Servers that cannot be reached are simply absent from the map, leaving the caller on
+ * the stored value: a momentarily unreachable server should not make every key look dead.
+ */
+async function liveStatuses(configs: ConfigStatusRef[]): Promise<Map<string, boolean>> {
+    const statuses = new Map<string, boolean>();
+    const serverIds = [...new Set(configs.map((config) => config.serverId))];
+
+    await Promise.all(
+        serverIds.map(async (serverId) => {
+            try {
+                for (let page = 0; page < MAX_PEER_PAGES; page++) {
+                    const response = await amneziaApiService.getConfigs(
+                        serverId,
+                        page * PEER_PAGE_SIZE,
+                        PEER_PAGE_SIZE
+                    );
+
+                    for (const user of response.items)
+                        for (const peer of user.peers)
+                            statuses.set(peer.id, peer.status === 'active');
+
+                    if (response.items.length < PEER_PAGE_SIZE) break;
+                }
+            } catch (error) {
+                await logsService.createLog(
+                    'SERVER',
+                    'WARNING',
+                    `Bot could not read live config statuses from server ${serverId}, falling back to the stored ones: ${error instanceof Error ? error.message : 'Unknown error'}`
+                );
+            }
+        })
+    );
+
+    return statuses;
+}
+
+/**
+ * Whether a config is usable right now: the server's answer when there is one, the stored
+ * flag when the server could not be asked.
+ */
+function isEnabled(config: ConfigStatusRef, statuses: Map<string, boolean>): boolean {
+    return statuses.get(config.id) ?? config.status;
+}
+
 // --------------------------------------------------------------------------------------
 // Keyboards
 // --------------------------------------------------------------------------------------
 
 function mainMenu(language: Languages): InlineKeyboardMarkup {
     const t = textsFor(language);
+    const admin = adminContact();
 
-    return {
-        inline_keyboard: [
-            [{ text: t.buttonKeys, callback_data: ACTION.keys }],
-            [
-                { text: t.buttonQr, callback_data: ACTION.qrList },
-                { text: t.buttonStatus, callback_data: ACTION.status },
-            ],
-            [{ text: t.buttonReissue, callback_data: ACTION.reissueList }],
-            [{ text: t.buttonApps, callback_data: ACTION.apps }],
+    const rows: InlineKeyboardMarkup['inline_keyboard'] = [
+        [{ text: t.buttonKeys, callback_data: ACTION.keys }],
+        [
+            { text: t.buttonQr, callback_data: ACTION.qrList },
+            { text: t.buttonStatus, callback_data: ACTION.status },
         ],
-    };
+        [{ text: t.buttonReissue, callback_data: ACTION.reissueList }],
+        [{ text: t.buttonApps, callback_data: ACTION.apps }],
+    ];
+
+    // A link button rather than a callback: the bot has no way to relay a message to the
+    // admin, and pretending otherwise would leave the client waiting for an answer that
+    // never comes. This opens the admin's chat directly.
+    if (admin) rows.push([{ text: t.buttonAdmin, url: admin.url }]);
+
+    return { inline_keyboard: rows };
 }
 
 /**
@@ -144,14 +218,22 @@ function mainMenu(language: Languages): InlineKeyboardMarkup {
 function configKeyboard(
     configs: BotConfig[],
     prefix: string,
-    language: Languages
+    language: Languages,
+    statuses: Map<string, boolean>
 ): InlineKeyboardMarkup {
     const t = textsFor(language);
 
     const rows = configs
         .filter((config) => Buffer.byteLength(prefix + config.id) <= CALLBACK_DATA_LIMIT)
         .map((config) => [
-            { text: shortConfigName(config.clientName), callback_data: prefix + config.id },
+            {
+                // Marked rather than hidden: a client who cannot find a key they know
+                // they have will ask why, and "switched off" is the answer they need.
+                text: isEnabled(config, statuses)
+                    ? shortConfigName(config.clientName)
+                    : `🔴 ${shortConfigName(config.clientName)}`,
+                callback_data: prefix + config.id,
+            },
         ]);
 
     rows.push([{ text: t.buttonBack, callback_data: ACTION.menu }]);
@@ -200,6 +282,18 @@ async function sendMenu(client: BotClient): Promise<void> {
     const t = textsFor(client.language);
 
     await say(client, `${t.greeting(client.name)}\n\n${t.menuHint}`, mainMenu(client.language));
+}
+
+/**
+ * The long introduction, sent when someone opens the bot rather than navigates back to
+ * the menu.
+ *
+ * Kept separate from `sendMenu` because a person who presses "Back" for the fifth time
+ * does not need to be told what the bot is for, and a person seeing it for the first time
+ * needs more than a list of buttons.
+ */
+async function sendWelcome(client: BotClient): Promise<void> {
+    await say(client, textsFor(client.language).welcome(client.name), mainMenu(client.language));
 }
 
 // --------------------------------------------------------------------------------------
@@ -270,14 +364,33 @@ async function bindChat(chatId: string, token: string): Promise<void> {
 
     const t = textsFor(client.language);
     await say(client, t.linkBound(client.name));
-    await sendMenu(client);
+    await sendWelcome(client);
 }
 
 async function sendKeys(client: BotClient): Promise<void> {
     const t = textsFor(client.language);
 
+    const all = await listConfigs(client.id);
+
+    if (all.length === 0) {
+        await say(client, t.noConfigs, mainMenu(client.language));
+        return;
+    }
+
+    // Sending a key for a switched-off config would be worse than sending nothing: the
+    // client imports it, it fails to connect, and they conclude the service is broken
+    // rather than that an admin turned it off.
+    const statuses = await liveStatuses(all);
+    const enabled = all.filter((config) => isEnabled(config, statuses));
+    const disabledCount = all.length - enabled.length;
+
+    if (enabled.length === 0) {
+        await say(client, t.noActiveConfigs, mainMenu(client.language));
+        return;
+    }
+
     const configs = await db.configs.findMany({
-        where: { clientId: client.id },
+        where: { id: { in: enabled.map((config) => config.id) } },
         select: {
             id: true,
             clientName: true,
@@ -287,11 +400,6 @@ async function sendKeys(client: BotClient): Promise<void> {
         },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
-
-    if (configs.length === 0) {
-        await say(client, t.noConfigs, mainMenu(client.language));
-        return;
-    }
 
     const verdict = await checkQuota(client.id, 'KEYS');
     if (!verdict.allowed) {
@@ -313,6 +421,8 @@ async function sendKeys(client: BotClient): Promise<void> {
 
     await recordAction(client.id, 'KEYS');
 
+    if (disabledCount > 0) await say(client, t.someConfigsDisabled(disabledCount));
+
     // Only promised when the sweeper is actually switched on, so the bot never claims a
     // cleanup that will not happen.
     const ttl = getKeyMessageTtlMs();
@@ -323,7 +433,7 @@ async function sendKeys(client: BotClient): Promise<void> {
     await logsService.createLog(
         'TELEGRAM',
         'INFO',
-        `Client <${client.name}> pulled ${configs.length} key(s) from the bot`
+        `Client <${client.name}> pulled ${configs.length} key(s) from the bot${disabledCount > 0 ? ` (${disabledCount} switched-off config(s) withheld)` : ''}`
     );
 }
 
@@ -351,11 +461,19 @@ async function sendQr(client: BotClient, configId: string): Promise<void> {
 
     const config = await db.configs.findFirst({
         where: { id: configId, clientId: client.id },
-        select: { clientName: true, serverId: true, vpnKey: true },
+        select: { id: true, clientName: true, serverId: true, status: true, vpnKey: true },
     });
 
     if (!config) {
         await say(client, t.configGone, mainMenu(client.language));
+        return;
+    }
+
+    // Same reasoning as in `sendKeys`: a QR code for a switched-off config scans fine and
+    // then fails to connect, which looks like a broken service rather than a decision.
+    const statuses = await liveStatuses([config]);
+    if (!isEnabled(config, statuses)) {
+        await say(client, t.configDisabled, mainMenu(client.language));
         return;
     }
 
@@ -427,11 +545,20 @@ async function reissue(client: BotClient, configId: string): Promise<void> {
 
     const config = await db.configs.findFirst({
         where: { id: configId, clientId: client.id },
-        select: { clientName: true },
+        select: { id: true, clientName: true, status: true, serverId: true },
     });
 
     if (!config) {
         await say(client, t.configGone, mainMenu(client.language));
+        return;
+    }
+
+    // The important one. A reissue creates a fresh peer on the VPN server, and a fresh
+    // peer is enabled — so without this check a client could undo an admin's block just
+    // by pressing "my key stopped working".
+    const statuses = await liveStatuses([config]);
+    if (!isEnabled(config, statuses)) {
+        await say(client, t.configDisabled, mainMenu(client.language));
         return;
     }
 
@@ -494,6 +621,7 @@ async function sendStatus(client: BotClient): Promise<void> {
     }
 
     const dateFormat = client.language === 'RUSSIAN' ? 'dd.MM.yyyy' : 'MM/dd/yyyy';
+    const statuses = await liveStatuses(configs);
 
     const rows = configs.map((config) => {
         const seconds = Number(config.expiresAt);
@@ -508,7 +636,7 @@ async function sendStatus(client: BotClient): Promise<void> {
             daysLeft: expiresAt
                 ? Math.ceil((expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
                 : null,
-            active: config.status,
+            active: isEnabled(config, statuses),
         });
     });
 
@@ -558,7 +686,11 @@ async function dispatch(client: BotClient, action: string): Promise<void> {
             await say(client, t.noConfigs, mainMenu(client.language));
             return;
         }
-        await say(client, t.qrPick, configKeyboard(configs, ACTION.qrFor, client.language));
+        await say(
+            client,
+            t.qrPick,
+            configKeyboard(configs, ACTION.qrFor, client.language, await liveStatuses(configs))
+        );
         return;
     }
 
@@ -580,7 +712,12 @@ async function dispatch(client: BotClient, action: string): Promise<void> {
         await say(
             client,
             t.reissuePick,
-            configKeyboard(configs, ACTION.reissueAsk, client.language)
+            configKeyboard(
+                configs,
+                ACTION.reissueAsk,
+                client.language,
+                await liveStatuses(configs)
+            )
         );
         return;
     }
@@ -596,11 +733,19 @@ async function dispatch(client: BotClient, action: string): Promise<void> {
         const configId = action.slice(ACTION.reissueAsk.length);
         const config = await db.configs.findFirst({
             where: { id: configId, clientId: client.id },
-            select: { clientName: true },
+            select: { id: true, clientName: true, status: true, serverId: true },
         });
 
         if (!config) {
             await say(client, t.configGone, mainMenu(client.language));
+            return;
+        }
+
+        // Checked here as well as in `reissue`, so a switched-off key is refused before
+        // the client is asked to confirm rather than after.
+        const statuses = await liveStatuses([config]);
+        if (!isEnabled(config, statuses)) {
+            await say(client, t.configDisabled, mainMenu(client.language));
             return;
         }
 
@@ -624,16 +769,25 @@ async function dispatch(client: BotClient, action: string): Promise<void> {
     await sendMenu(client);
 }
 
-/** Maps the typed commands onto the same actions the buttons use. */
+/**
+ * Maps the typed commands onto the same actions the buttons use.
+ *
+ * Every command Telegram offers in its "/" dropdown has to land here, or a client picks
+ * one from the list and the bot answers with the menu as though they had typed nonsense.
+ * The list itself lives in `texts.ts` and is registered by `syncCommands`.
+ */
 function actionForCommand(text: string): string | null {
     const command = text.trim().split(/\s+/)[0]?.toLowerCase().split('@')[0];
 
     switch (command) {
-        case '/start':
         case '/menu':
             return ACTION.menu;
         case '/keys':
             return ACTION.keys;
+        case '/qr':
+            return ACTION.qrList;
+        case '/replace':
+            return ACTION.reissueList;
         case '/status':
             return ACTION.status;
         case '/apps':
@@ -662,7 +816,14 @@ async function handleMessage(message: TelegramIncomingMessage): Promise<void> {
     }
 
     if (text.toLowerCase().startsWith('/help')) {
-        await say(client, textsFor(client.language).help, mainMenu(client.language));
+        await say(client, helpMessage(client.language), mainMenu(client.language));
+        return;
+    }
+
+    // A bare /start is someone opening the bot rather than navigating it, which is the
+    // one moment the long explanation belongs.
+    if (text.toLowerCase().startsWith('/start')) {
+        await sendWelcome(client);
         return;
     }
 
@@ -710,6 +871,40 @@ async function ensureState() {
 }
 
 /**
+ * Publishes the command list that fills Telegram's "/" dropdown.
+ *
+ * Telegram stores this per bot rather than per message, so it only has to be sent when the
+ * wording changes — hence the fingerprint. Without that guard this would be an extra API
+ * call on every polling run, once a minute, forever.
+ *
+ * The Russian list is registered as the fallback and the English one against `en`, so
+ * Telegram picks by the reader's own interface language. That is not necessarily the
+ * language the panel has recorded for them, but it is the language their Telegram is in,
+ * which is the better guess for a menu Telegram itself draws.
+ */
+async function syncCommands(storedHash: string | null): Promise<void> {
+    const russian = textsFor('RUSSIAN').commands;
+    const english = textsFor('ENGLISH').commands;
+
+    const hash = createHash('sha256')
+        .update(JSON.stringify({ russian, english }))
+        .digest('hex');
+
+    if (hash === storedHash) return;
+
+    await telegramService.setMyCommands(russian);
+    await telegramService.setMyCommands(english, 'en');
+
+    await db.telegramBotState.update({ where: { id: 1 }, data: { commandsHash: hash } });
+
+    await logsService.createLog(
+        'TELEGRAM',
+        'INFO',
+        `Bot command list registered with Telegram (${russian.length} commands)`
+    );
+}
+
+/**
  * Fetches pending updates and answers them, for at most `maxDurationMs`.
  *
  * This is the only place allowed to pass an offset to `getUpdates`, because confirming an
@@ -725,7 +920,19 @@ export async function processUpdates(
     if (process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT !== 'true')
         return { processed: 0, skipped: 'disabled' };
 
-    await ensureState();
+    const state = await ensureState();
+
+    // Best effort: a bot that could not publish its command list still answers everything
+    // typed by hand, so this must not stop the run.
+    try {
+        await syncCommands(state.commandsHash);
+    } catch (error) {
+        await logsService.createLog(
+            'TELEGRAM',
+            'WARNING',
+            `Bot command list could not be registered: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+    }
 
     // The lease outlives the run so a healthy one cannot have it stolen mid-poll, and
     // expires on its own so a run that died without reaching its `finally` only costs the
