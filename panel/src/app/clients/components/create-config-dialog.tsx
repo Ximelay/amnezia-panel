@@ -72,9 +72,7 @@ export function CreateConfigDialog() {
     const watchServerId = form.watch('serverId');
 
     const { data: clients, isLoading: isLoadingClients } = api.clients.getClients.useQuery(
-        {
-            serverId: watchServerId,
-        },
+        undefined,
         { enabled: open }
     );
 

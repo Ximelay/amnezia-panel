@@ -83,9 +83,7 @@ export function ConfigDialog({ config }: ConfigInfoDialogProps) {
         { enabled: open }
     );
 
-    const { data: clients } = api.clients.getClients.useQuery({
-        serverId: String(config.serverId),
-    });
+    const { data: clients } = api.clients.getClients.useQuery();
 
     const getTruncatedKey = (key: string): string => {
         const protocolMatch = key.match(/^([a-zA-Z]+):\/\//);

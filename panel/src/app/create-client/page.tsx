@@ -98,7 +98,7 @@ export default function CreateClientPage() {
             router.push('/');
         },
         onError: (error) => {
-            toast.error('Error creating client');
+            toast.error(error.message || 'Error creating client');
             console.error(error);
         },
     });

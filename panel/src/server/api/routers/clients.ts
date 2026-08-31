@@ -38,32 +38,64 @@ function normaliseTelegramId(value: string | undefined): string | null {
     return trimmed ? trimmed : null;
 }
 
+/**
+ * Refuses to give one Telegram chat to two clients.
+ *
+ * The bot identifies who is asking by chat id alone, so a shared id leaves it unable to
+ * tell whose keys to hand out, and it stops serving that chat entirely. The panel used to
+ * allow this silently — and the duplicate is invisible in the table, which is scoped to
+ * one server — so the first sign of trouble was a client whose bot had stopped working.
+ *
+ * Not a database constraint: the column may already hold duplicates on a running panel,
+ * and `db push` runs unattended on every container start, so adding one there could
+ * strand a deployment. This closes the door for new writes; existing pairs are reported
+ * by the bot's log.
+ */
+async function assertTelegramIdFree(
+    db: Prisma.TransactionClient,
+    telegramId: string | null,
+    exceptClientId?: number
+): Promise<void> {
+    if (!telegramId) return;
+
+    const taken = await db.clients.findFirst({
+        where: {
+            telegramId,
+            ...(exceptClientId !== undefined && { id: { not: exceptClientId } }),
+        },
+        select: { id: true, name: true },
+    });
+
+    if (taken)
+        throw new TRPCError({
+            code: 'CONFLICT',
+            message: `Telegram chat ${telegramId} already belongs to client "${taken.name}". A client is one row with configs on any number of servers — add the config to that client instead of creating a second one.`,
+        });
+}
+
 // Telegram keeps unconfirmed updates for 24 hours, so a longer link would outlive the
 // update it is meant to be matched against.
 const TELEGRAM_LINK_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const clientsRouter = createTRPCRouter({
-    getClients: protectedProcedureWithRole('ADMIN')
-        .input(z.object({ serverId: z.string().optional() }))
-        .query(async ({ input, ctx }) => {
-            const { serverId } = input;
-
-            return await ctx.db.clients.findMany({
-                where: {
-                    ...(serverId && {
-                        Configs: {
-                            some: {
-                                serverId: Number(serverId),
-                            },
-                        },
-                    }),
-                },
-                select: {
-                    id: true,
-                    name: true,
-                },
-            });
-        }),
+    /**
+     * Every client, for the pickers that attach a config to one.
+     *
+     * Deliberately not scoped to a server. It used to be, and that is what produced
+     * duplicate client rows: adding a config on a second server did not offer the clients
+     * who only had configs on the first, so the only way forward from that dialog was to
+     * create the same person again. A client is one row with configs on any number of
+     * servers, and this list has to reflect that.
+     *
+     * The server-scoped view of who exists is `getClientsWithConfigs`, which is what the
+     * table renders.
+     */
+    getClients: protectedProcedureWithRole('ADMIN').query(async ({ ctx }) => {
+        return await ctx.db.clients.findMany({
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' },
+        });
+    }),
 
     getClientsWithConfigs: protectedProcedureWithRole('ADMIN')
         .input(
@@ -314,12 +346,11 @@ export const clientsRouter = createTRPCRouter({
         .mutation(async ({ ctx, input }) => {
             const { name, language, telegramId, configs } = input;
 
+            const chatId = normaliseTelegramId(telegramId);
+            await assertTelegramIdFree(ctx.db, chatId);
+
             const createdClient = await ctx.db.clients.create({
-                data: {
-                    name,
-                    language: language as Languages,
-                    telegramId: normaliseTelegramId(telegramId),
-                },
+                data: { name, language: language as Languages, telegramId: chatId },
             });
 
             for (const config of configs) {
@@ -365,9 +396,12 @@ export const clientsRouter = createTRPCRouter({
         .mutation(async ({ ctx, input }) => {
             const { id, name, telegramId } = input;
 
+            const chatId = normaliseTelegramId(telegramId);
+            await assertTelegramIdFree(ctx.db, chatId, id);
+
             const updatedClient = await ctx.db.clients.update({
                 where: { id },
-                data: { name, telegramId: normaliseTelegramId(telegramId) },
+                data: { name, telegramId: chatId },
                 select: { name: true },
             });
 

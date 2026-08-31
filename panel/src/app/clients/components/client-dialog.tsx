@@ -66,7 +66,9 @@ export function UpdateClientDialog({ id, name, language, telegramId }: Props) {
             form.reset();
         },
         onError: (error) => {
-            toast.error('Error');
+            // The server explains what is wrong — which client already holds this chat
+            // id, for instance — and that is the only thing that makes the error fixable.
+            toast.error(error.message || 'Error updating client');
 
             console.error(error);
         },

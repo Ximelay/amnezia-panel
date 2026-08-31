@@ -77,9 +77,7 @@ export default function NotificationPage() {
         },
     });
 
-    const { data: clients, isLoading: isLoadingClients } = api.clients.getClients.useQuery({
-        serverId: undefined,
-    });
+    const { data: clients, isLoading: isLoadingClients } = api.clients.getClients.useQuery();
 
     const [localClients, setLocalClients] = useState<typeof clients>([]);
 
