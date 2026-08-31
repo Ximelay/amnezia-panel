@@ -80,24 +80,76 @@ interface BotConfig {
  * Returns null for an ambiguous chat instead of picking one: two clients sharing a chat
  * id is always an operator mistake, and guessing would hand one person the other's keys.
  */
-async function resolveClient(chatId: string): Promise<BotClient | null> {
-    const matches = await db.clients.findMany({
+const CLIENT_FIELDS = {
+    id: true,
+    name: true,
+    language: true,
+    status: true,
+    telegramId: true,
+} as const;
+
+export type ResolveOutcome =
+    | { kind: 'ok'; client: BotClient }
+    | { kind: 'unknown' }
+    | { kind: 'ambiguous'; names: string[] };
+
+async function resolveClient(chatId: string): Promise<ResolveOutcome> {
+    let matches = await db.clients.findMany({
         where: { telegramId: chatId },
-        select: { id: true, name: true, language: true, status: true, telegramId: true },
+        select: CLIENT_FIELDS,
     });
 
-    if (matches.length === 1) return matches[0] as BotClient;
+    // `telegramId` is a free-text field an admin can also fill in by hand, so a value
+    // copied with a stray space around it is stored verbatim. The panel never notices —
+    // Telegram parses the id leniently when sending — but an exact match here would not,
+    // and the client would be told they are not linked. Repaired rather than merely
+    // tolerated, so the next lookup takes the fast path.
+    if (matches.length === 0) {
+        const trimmed = await db.$queryRaw<{ id: number }[]>`
+            SELECT id FROM "Clients" WHERE btrim("telegramId") = ${chatId}
+        `;
 
-    if (matches.length > 1)
+        if (trimmed.length > 0) {
+            const ids = trimmed.map((row) => row.id);
+
+            matches = await db.clients.findMany({
+                where: { id: { in: ids } },
+                select: CLIENT_FIELDS,
+            });
+
+            await db.clients.updateMany({ where: { id: { in: ids } }, data: { telegramId: chatId } });
+
+            await logsService.createLog(
+                'TELEGRAM',
+                'WARNING',
+                `Telegram id of client(s) <${matches.map((client) => client.name).join(', ')}> was stored with surrounding whitespace and has been normalised to ${chatId}`
+            );
+        }
+    }
+
+    if (matches.length === 1) return { kind: 'ok', client: matches[0] as BotClient };
+
+    if (matches.length > 1) {
+        const names = matches.map((client) => client.name);
+
         await logsService.createLog(
             'TELEGRAM',
             'ERROR',
-            `Telegram chat ${chatId} is bound to ${matches.length} clients (${matches
-                .map((client) => client.name)
-                .join(', ')}); the bot refuses to serve it until only one remains`
+            `Telegram chat ${chatId} is bound to ${matches.length} clients (${names.join(', ')}); the bot refuses to serve it until only one remains`
         );
 
-    return null;
+        return { kind: 'ambiguous', names };
+    }
+
+    // Logged because the alternative is invisible: the client is told to ask for a link
+    // and the admin has no way to see which chat id failed to match.
+    await logsService.createLog(
+        'TELEGRAM',
+        'WARNING',
+        `Telegram chat ${chatId} wrote to the bot but matches no client's telegramId`
+    );
+
+    return { kind: 'unknown' };
 }
 
 /** The client's configs, in a stable order so button lists do not reshuffle. */
@@ -276,6 +328,19 @@ async function say(
 /** Answers a chat that has no client behind it, where there is no language to use. */
 async function sayToUnknownChat(chatId: string, text: string): Promise<void> {
     await telegramService.sendMessage({ chatId, text, parseMode: 'HTML' }, `chat ${chatId}`);
+}
+
+/**
+ * What to tell a chat the bot could not resolve to exactly one client.
+ *
+ * Russian because there is no client record to read a language preference from, and the
+ * two cases are kept apart on purpose: "you are not linked" sends the reader to fetch a
+ * link they do not need, when the real problem is two clients sharing one chat.
+ */
+function unresolvedText(outcome: Exclude<ResolveOutcome, { kind: 'ok' }>): string {
+    const t = textsFor('RUSSIAN');
+
+    return outcome.kind === 'ambiguous' ? t.ambiguousChat : t.unknownChat;
 }
 
 async function sendMenu(client: BotClient): Promise<void> {
@@ -809,11 +874,13 @@ async function handleMessage(message: TelegramIncomingMessage): Promise<void> {
         return;
     }
 
-    const client = await resolveClient(chatId);
-    if (!client) {
-        await sayToUnknownChat(chatId, textsFor('RUSSIAN').unknownChat);
+    const resolved = await resolveClient(chatId);
+    if (resolved.kind !== 'ok') {
+        await sayToUnknownChat(chatId, unresolvedText(resolved));
         return;
     }
+
+    const client = resolved.client;
 
     if (text.toLowerCase().startsWith('/help')) {
         await say(client, helpMessage(client.language), mainMenu(client.language));
@@ -833,10 +900,10 @@ async function handleMessage(message: TelegramIncomingMessage): Promise<void> {
 async function handleCallback(callback: TelegramCallbackQuery): Promise<void> {
     const chatId = callback.message ? String(callback.message.chat.id) : String(callback.from.id);
 
-    const client = await resolveClient(chatId);
-    if (!client) {
+    const resolved = await resolveClient(chatId);
+    if (resolved.kind !== 'ok') {
         await telegramService.answerCallbackQuery(callback.id);
-        await sayToUnknownChat(chatId, textsFor('RUSSIAN').unknownChat);
+        await sayToUnknownChat(chatId, unresolvedText(resolved));
         return;
     }
 
@@ -849,7 +916,7 @@ async function handleCallback(callback: TelegramCallbackQuery): Promise<void> {
     if (callback.message)
         await telegramService.clearReplyMarkup(chatId, callback.message.message_id);
 
-    await dispatch(client, callback.data ?? ACTION.menu);
+    await dispatch(resolved.client, callback.data ?? ACTION.menu);
 }
 
 // --------------------------------------------------------------------------------------
@@ -1024,12 +1091,17 @@ async function handleUpdate(update: TelegramUpdate): Promise<void> {
             update.message?.chat.id;
 
         if (chatId !== undefined) {
-            const client = await resolveClient(String(chatId)).catch(() => null);
-            const language = client?.language ?? 'RUSSIAN';
+            const resolved = await resolveClient(String(chatId)).catch(
+                () => ({ kind: 'unknown' }) as ResolveOutcome
+            );
+            const client = resolved.kind === 'ok' ? resolved.client : null;
 
             await telegramService
                 .sendMessage(
-                    { chatId: String(chatId), text: textsFor(language).genericError },
+                    {
+                        chatId: String(chatId),
+                        text: textsFor(client?.language ?? 'RUSSIAN').genericError,
+                    },
                     client?.name ?? `chat ${chatId}`
                 )
                 .catch(() => undefined);

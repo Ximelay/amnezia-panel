@@ -24,6 +24,20 @@ import { updateExpiresAtSchema } from '@/lib/schemas/configs';
 import { Protocols } from 'prisma/generated/enums';
 import { readProtocolVersion } from '@/server/services/vpn-config';
 
+/**
+ * Stores a hand-entered chat id the way the bot will look it up.
+ *
+ * The field is free text, and Telegram accepts a padded id when the panel sends to it, so
+ * a stray space survives unnoticed until the bot's exact match fails and the client is
+ * told they are not linked. An empty field becomes null rather than "", so "no chat id"
+ * stays one value instead of two.
+ */
+function normaliseTelegramId(value: string | undefined): string | null {
+    const trimmed = value?.trim();
+
+    return trimmed ? trimmed : null;
+}
+
 // Telegram keeps unconfirmed updates for 24 hours, so a longer link would outlive the
 // update it is meant to be matched against.
 const TELEGRAM_LINK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -301,7 +315,11 @@ export const clientsRouter = createTRPCRouter({
             const { name, language, telegramId, configs } = input;
 
             const createdClient = await ctx.db.clients.create({
-                data: { name, language: language as Languages, telegramId },
+                data: {
+                    name,
+                    language: language as Languages,
+                    telegramId: normaliseTelegramId(telegramId),
+                },
             });
 
             for (const config of configs) {
@@ -349,7 +367,7 @@ export const clientsRouter = createTRPCRouter({
 
             const updatedClient = await ctx.db.clients.update({
                 where: { id },
-                data: { name, telegramId },
+                data: { name, telegramId: normaliseTelegramId(telegramId) },
                 select: { name: true },
             });
 

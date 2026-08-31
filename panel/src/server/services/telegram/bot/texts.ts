@@ -52,6 +52,7 @@ interface BotTexts {
     buttonAdmin: string;
     commands: BotCommand[];
     unknownChat: string;
+    ambiguousChat: string;
     clientDisabled: string;
 
     linkBound: (clientName: string) => string;
@@ -153,6 +154,8 @@ const RUSSIAN: BotTexts = {
     ],
     unknownChat:
         'Этот чат не привязан ни к одному пользователю. Попросите администратора прислать вам ссылку для привязки.',
+    ambiguousChat:
+        'Этот чат привязан сразу к нескольким пользователям, поэтому бот не может определить, чьи ключи выдавать. Администратор уже уведомлён — напишите ему.',
     clientDisabled:
         'Ваш доступ сейчас приостановлен. Свяжитесь с администратором, чтобы возобновить его.',
 
@@ -255,6 +258,8 @@ The menu is below this message, and the full command list opens from the "/" but
     ],
     unknownChat:
         'This chat is not linked to any user. Ask your administrator to send you a linking link.',
+    ambiguousChat:
+        'This chat is linked to more than one user, so the bot cannot tell whose keys to hand out. Your administrator has been notified — please message them.',
     clientDisabled: 'Your access is currently suspended. Contact your administrator to restore it.',
 
     linkBound: (clientName) =>
