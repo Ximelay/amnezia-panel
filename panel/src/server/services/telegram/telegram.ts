@@ -1,5 +1,6 @@
 import type {
     SendMessageParams,
+    SendPhotoParams,
     TelegramMessageResponse,
     TelegramUpdate,
 } from '@/server/interfaces/telegram';
@@ -57,11 +58,11 @@ class TelegramService {
         return 'INTERNAL_SERVER_ERROR';
     }
 
-    private async makeRequestWithRetry<T>(
-        endpoint: string,
-        options: RequestInit,
-        body?: any
-    ): Promise<T> {
+    /**
+     * Refuses before any network call when the integration is not configured, so a
+     * missing token reads as "you have not set this up" rather than as a Telegram error.
+     */
+    private assertConfigured(): void {
         if (process.env.NEXT_PUBLIC_USES_TELEGRAM_BOT !== 'true')
             throw new TRPCError({
                 code: 'BAD_REQUEST',
@@ -74,6 +75,45 @@ class TelegramService {
                 code: 'BAD_REQUEST',
                 message: 'TELEGRAM_BOT_TOKEN is not set in .env',
             });
+    }
+
+    /** Turns a `{ ok: false }` body into the TRPCError the callers match on. */
+    private unwrap<T>(data: any): T {
+        if (data.ok) return data.result as T;
+
+        const errorCode = data.error_code || 500;
+        const description = data.description || 'Unknown Telegram error';
+
+        const trpcErrorCode = this.getTrpcErrorCodeFromTelegram(description, errorCode);
+
+        let userMessage = description;
+
+        if (errorCode === 403) {
+            userMessage = 'Bot was blocked by the user or user is deactivated';
+        } else if (errorCode === 400) {
+            if (
+                description.includes('chat not found') ||
+                description.includes('user not found') ||
+                description.includes('PEER_ID_INVALID')
+            ) {
+                userMessage = 'User has not started the bot or chat not found';
+            }
+        }
+
+        throw new TRPCError({ code: trpcErrorCode, message: userMessage });
+    }
+
+    private async makeRequestWithRetry<T>(
+        endpoint: string,
+        options: RequestInit,
+        body?: any,
+        /**
+         * Long polling holds the connection open on purpose, so the caller has to be able
+         * to lift the timeout that guards every other call from a hung socket.
+         */
+        timeoutMs = 30_000
+    ): Promise<T> {
+        this.assertConfigured();
 
         const url = `${this.baseUrl}/${endpoint}`;
 
@@ -82,42 +122,58 @@ class TelegramService {
                 const fetchOptions: RequestInit = {
                     ...options,
                     body: body ? JSON.stringify(body) : undefined,
+                    signal: AbortSignal.timeout(timeoutMs),
                 };
 
                 const response = await fetch(url, fetchOptions);
                 const data = await response.json();
 
-                if (!data.ok) {
-                    const errorCode = data.error_code || 500;
-                    const description = data.description || 'Unknown Telegram error';
-
-                    const trpcErrorCode = this.getTrpcErrorCodeFromTelegram(description, errorCode);
-
-                    let userMessage = description;
-
-                    if (errorCode === 403) {
-                        userMessage = 'Bot was blocked by the user or user is deactivated';
-                    } else if (errorCode === 400) {
-                        if (
-                            description.includes('chat not found') ||
-                            description.includes('user not found') ||
-                            description.includes('PEER_ID_INVALID')
-                        ) {
-                            userMessage = 'User has not started the bot or chat not found';
-                        }
-                    }
-
-                    throw new TRPCError({
-                        code: trpcErrorCode,
-                        message: userMessage,
-                    });
-                }
-
-                return data.result as T;
+                return this.unwrap<T>(data);
             } catch (error) {
                 if (error instanceof TRPCError) {
                     throw error;
                 }
+
+                if (attempt === this.maxRetries) {
+                    throw new TRPCError({
+                        code: 'INTERNAL_SERVER_ERROR',
+                        message: `Telegram API request failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    });
+                }
+
+                await this.sleep(this.retryDelay * attempt);
+            }
+        }
+
+        throw new TRPCError({
+            code: 'TIMEOUT',
+            message: 'Telegram API request failed after maximum retries',
+        });
+    }
+
+    /**
+     * Uploads binary content. Separate from the JSON path because Telegram only accepts a
+     * file the bot holds in memory as multipart/form-data, and `fetch` has to set the
+     * boundary itself — hence no Content-Type header here.
+     */
+    private async makeFormRequestWithRetry<T>(endpoint: string, form: FormData): Promise<T> {
+        this.assertConfigured();
+
+        const url = `${this.baseUrl}/${endpoint}`;
+
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'User-Agent': 'TelegramBotClient/1.0' },
+                    body: form,
+                    signal: AbortSignal.timeout(30_000),
+                });
+                const data = await response.json();
+
+                return this.unwrap<T>(data);
+            } catch (error) {
+                if (error instanceof TRPCError) throw error;
 
                 if (attempt === this.maxRetries) {
                     throw new TRPCError({
@@ -166,6 +222,76 @@ class TelegramService {
                 code: 'INTERNAL_SERVER_ERROR',
                 message: `Failed to send Telegram message for client ${clientName}: ${error instanceof Error ? error.message : 'Unknown error'}`,
             });
+        }
+    }
+
+    /**
+     * Sends an image the bot generated itself, such as a config QR code.
+     *
+     * Logged like `sendMessage` and for the same reason: the caller only sees the mapped
+     * message, while the log keeps Telegram's own description of what went wrong.
+     */
+    async sendPhoto(params: SendPhotoParams, clientName: string): Promise<TelegramMessageResponse> {
+        try {
+            const form = new FormData();
+            form.append('chat_id', String(params.chatId));
+            form.append(
+                'photo',
+                new Blob([new Uint8Array(params.photo)], { type: 'image/png' }),
+                params.filename ?? 'qr.png'
+            );
+            if (params.caption) form.append('caption', params.caption);
+            if (params.parseMode) form.append('parse_mode', params.parseMode);
+            if (params.replyMarkup) form.append('reply_markup', JSON.stringify(params.replyMarkup));
+
+            return await this.makeFormRequestWithRetry<TelegramMessageResponse>('sendPhoto', form);
+        } catch (error) {
+            await logsService.createLog(
+                'TELEGRAM',
+                'ERROR',
+                `Failed to send photo for client ${clientName}: ${error instanceof TRPCError || error instanceof Error ? error.message : 'Unknown error'}`
+            );
+
+            if (error instanceof TRPCError) throw error;
+
+            throw new TRPCError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: `Failed to send photo for client ${clientName}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            });
+        }
+    }
+
+    /**
+     * Clears the loading spinner Telegram shows on a pressed inline button, optionally
+     * with a toast on the client's screen.
+     *
+     * Never throws: the work the button asked for has already happened by the time this
+     * runs, and a failed acknowledgement is cosmetic. A callback id is also only valid
+     * for a short window, so a replayed update legitimately fails here.
+     */
+    async answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+        try {
+            await this.makeRequestWithRetry('answerCallbackQuery', this.getFetchOptions(), {
+                callback_query_id: callbackQueryId,
+                text,
+            });
+        } catch {
+            // Deliberately swallowed, see above.
+        }
+    }
+
+    /**
+     * Drops the buttons off a message the bot already sent, so a one-shot choice cannot
+     * be pressed twice. Best effort for the same reason as `answerCallbackQuery`.
+     */
+    async clearReplyMarkup(chatId: string | number, messageId: number): Promise<void> {
+        try {
+            await this.makeRequestWithRetry('editMessageReplyMarkup', this.getFetchOptions(), {
+                chat_id: chatId,
+                message_id: messageId,
+            });
+        } catch {
+            // Deliberately swallowed, see above.
         }
     }
 
@@ -264,18 +390,36 @@ class TelegramService {
     }
 
     /**
-     * Polled on demand rather than from a long-running bot process.
+     * Fetches pending updates.
      *
-     * Offsets are deliberately never confirmed: Telegram keeps unconfirmed updates for
-     * 24 hours, and several clients may have a pending deep link at the same time, so
-     * consuming them here would make one lookup hide another.
+     * `offset` is what makes an update disappear from the queue: Telegram holds every
+     * update for 24 hours until a poll asks for a higher id. Passing it is therefore
+     * only safe for the single consumer that also handles what it fetches — the bot
+     * poller. Everything else must read without an offset, or it will consume updates
+     * the poller has not seen yet.
+     *
+     * `timeoutSeconds` turns the call into a long poll: Telegram holds the connection
+     * open until something arrives, which is what keeps the bot's replies prompt without
+     * a permanently running process.
      */
-    async getUpdates(): Promise<TelegramUpdate[]> {
+    async getUpdates(params?: {
+        offset?: number;
+        timeoutSeconds?: number;
+    }): Promise<TelegramUpdate[]> {
+        const timeoutSeconds = params?.timeoutSeconds ?? 0;
+
         try {
             return await this.makeRequestWithRetry<TelegramUpdate[]>(
                 'getUpdates',
                 this.getFetchOptions(),
-                { timeout: 0, allowed_updates: ['message'] }
+                {
+                    offset: params?.offset,
+                    timeout: timeoutSeconds,
+                    allowed_updates: ['message', 'callback_query'],
+                },
+                // Telegram answers a long poll a moment after its own deadline; the extra
+                // ten seconds keep the client from aborting a call that is about to return.
+                (timeoutSeconds + 10) * 1000
             );
         } catch (error) {
             await logsService.createLog(

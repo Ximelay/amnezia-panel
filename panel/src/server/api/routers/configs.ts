@@ -7,7 +7,6 @@ import {
     updateClientConfigSchema,
     updateExpiresAtSchema,
 } from '@/lib/schemas/configs';
-import type { CreateClientResponse } from '@/server/interfaces/amnezia-api';
 import { amneziaApiService } from '@/server/services/amnezia-api';
 import { protocolsApiMapping, protocolsMapping } from '@/lib/data/mappings';
 import { encryptionService } from '@/server/services/encryption';
@@ -20,48 +19,9 @@ import { telegramService } from '@/server/services/telegram/telegram';
 import {
     purgeKeyMessagesForConfigs,
     recordKeyMessage,
+    withdrawSentKeys,
 } from '@/server/services/telegram/key-messages';
-
-/**
- * Takes the key back out of the client's Telegram chat once the config behind it is dead.
- *
- * Best effort by design: the config is already revoked on the VPN server by the time this
- * runs, so a Telegram outage must not turn a successful revocation into an error. What it
- * cannot do is silently: a key older than 48 hours stays in the chat forever, and that
- * fact belongs in the log rather than in nobody's head.
- */
-async function withdrawSentKeys(
-    ctx: { session: { user: { id: string } } },
-    configIds: string[],
-    label: string
-): Promise<void> {
-    try {
-        const purged = await purgeKeyMessagesForConfigs(configIds);
-
-        if (purged.deleted > 0)
-            await logsService.createLog(
-                'TELEGRAM',
-                'INFO',
-                `${purged.deleted} Telegram message(s) with the key of <${label}> deleted from the client chat`,
-                ctx.session.user.id
-            );
-
-        if (purged.expired > 0)
-            await logsService.createLog(
-                'TELEGRAM',
-                'WARNING',
-                `${purged.expired} Telegram message(s) with the key of <${label}> stayed in the client chat: older than 48 hours and no longer deletable by the bot`,
-                ctx.session.user.id
-            );
-    } catch (error) {
-        await logsService.createLog(
-            'TELEGRAM',
-            'WARNING',
-            `Could not withdraw the sent key of <${label}> from Telegram: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            ctx.session.user.id
-        );
-    }
-}
+import { reissueConfigById } from '@/server/services/config-reissue';
 
 export const configsRouter = createTRPCRouter({
     createConfig: protectedProcedureWithRole('ADMIN')
@@ -141,7 +101,7 @@ export const configsRouter = createTRPCRouter({
                 });
             }
 
-            await withdrawSentKeys(ctx, [id], deletedConfig?.clientName ?? id);
+            await withdrawSentKeys([id], deletedConfig?.clientName ?? id, ctx.session.user.id);
 
             await logsService.createLog(
                 'CLIENT',
@@ -270,113 +230,12 @@ Expiration date: <b>${expiryDate}</b>
      */
     reissueConfig: protectedProcedureWithRole('ADMIN')
         .input(reissueConfigSchema)
-        .mutation(async ({ ctx, input }) => {
-            const { id } = input;
-
-            const oldConfig = await ctx.db.configs.findUnique({
-                where: { id },
-                select: {
-                    serverId: true,
-                    clientId: true,
-                    clientName: true,
-                    protocol: true,
-                    expiresAt: true,
-                },
-            });
-            if (!oldConfig)
-                throw new TRPCError({ code: 'NOT_FOUND', message: 'Config not found' });
-
-            const expiresAt = input.expiresAt ?? oldConfig.expiresAt;
-            if (!expiresAt)
-                throw new TRPCError({
-                    code: 'BAD_REQUEST',
-                    message: 'Config has no expiration date, provide one to reissue it',
-                });
-
-            const apiProtocol = protocolsApiMapping[oldConfig.protocol];
-
-            // The new config is created first: if this fails, the client keeps the old one.
-            let clientName = oldConfig.clientName;
-            let createdConfig: CreateClientResponse;
-
-            try {
-                createdConfig = await amneziaApiService.createConfig(
-                    oldConfig.serverId,
-                    clientName,
-                    apiProtocol,
-                    Number(expiresAt)
-                );
-            } catch (error) {
-                if (!(error instanceof TRPCError) || error.code !== 'CONFLICT') throw error;
-
-                // The server rejects a duplicate name while the old config still exists.
-                clientName = `${oldConfig.clientName}-r${Date.now().toString(36).slice(-4)}`;
-                createdConfig = await amneziaApiService.createConfig(
-                    oldConfig.serverId,
-                    clientName,
-                    apiProtocol,
-                    Number(expiresAt)
-                );
-            }
-
-            // From here on the replacement already works, so failures are logged, not thrown.
-            try {
-                await amneziaApiService.deleteConfig(oldConfig.serverId, id, apiProtocol);
-            } catch (error) {
-                await logsService.createLog(
-                    'SERVER',
-                    'WARNING',
-                    `Config <${oldConfig.clientName}> was reissued but the old one could not be removed from the server: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                    ctx.session.user.id
-                );
-            }
-
-            const encryptedVpnKey = encryptionService.encrypt(createdConfig.client.config);
-
-            await ctx.db.$transaction([
-                ctx.db.configs.delete({ where: { id } }),
-                ctx.db.configs.create({
-                    data: {
-                        id: createdConfig.client.id,
-                        serverId: oldConfig.serverId,
-                        clientId: oldConfig.clientId,
-                        clientName,
-                        expiresAt,
-                        protocol: oldConfig.protocol,
-                        protocolVersion: readProtocolVersion(createdConfig.client.config),
-                        vpnKey: encryptedVpnKey,
-                    },
-                }),
-            ]);
-
-            let qrCode: Awaited<ReturnType<typeof amneziaApiService.generateQrCode>> | null = null;
-            try {
-                qrCode = await amneziaApiService.generateQrCode(
-                    oldConfig.serverId,
-                    createdConfig.client.config
-                );
-            } catch {
-                // The key alone is enough to hand over, the QR code is a convenience.
-            }
-
-            // The point of a reissue is that the old key is compromised or broken, so
-            // leaving it readable in the chat defeats the exercise.
-            await withdrawSentKeys(ctx, [id], oldConfig.clientName);
-
-            await logsService.createLog(
-                'CLIENT',
-                'INFO',
-                `Config <${clientName}> reissued`,
-                ctx.session.user.id
-            );
-
-            return {
-                id: createdConfig.client.id,
-                clientName,
-                vpnKey: createdConfig.client.config,
-                qrCode,
-            };
-        }),
+        .mutation(async ({ ctx, input }) =>
+            reissueConfigById(input.id, {
+                expiresAt: input.expiresAt,
+                adminId: ctx.session.user.id,
+            })
+        ),
 
     updateExpiresAt: protectedProcedureWithRole('ADMIN')
         .input(updateExpiresAtSchema)

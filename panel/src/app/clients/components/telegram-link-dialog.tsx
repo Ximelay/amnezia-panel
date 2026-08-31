@@ -62,9 +62,7 @@ export default function TelegramLinkDialog({ id, name, telegramId }: Readonly<Pr
                 return;
             }
 
-            toast.success(
-                `Telegram bound: ${data.username ? `@${data.username}` : data.telegramId}`
-            );
+            toast.success(`Telegram bound: ${data.telegramId}`);
             utils.clients.getClientsWithConfigs.invalidate();
             utils.clients.getTelegramLink.invalidate({ id });
             setLink(null);

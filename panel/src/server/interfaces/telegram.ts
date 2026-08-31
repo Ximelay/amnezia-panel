@@ -1,6 +1,22 @@
 type ParseModeType = 'HTML' | 'Markdown' | 'MarkdownV2'
 type ChatType = 'private' | 'group' | 'supergroup' | 'channel'
 
+/**
+ * A button that sends `callback_data` back to the bot instead of opening a link.
+ *
+ * Telegram caps `callback_data` at 64 bytes, which is why the bot addresses configs by
+ * a short index into a freshly listed set rather than by their id.
+ */
+export interface InlineKeyboardButton {
+    text: string;
+    callback_data?: string;
+    url?: string;
+}
+
+export interface InlineKeyboardMarkup {
+    inline_keyboard: InlineKeyboardButton[][];
+}
+
 export interface SendMessageParams {
     chatId: string | number;
     text: string;
@@ -8,7 +24,17 @@ export interface SendMessageParams {
     disableWebPagePreview?: boolean;
     disableNotification?: boolean;
     replyToMessageId?: number;
-    replyMarkup?: any;
+    replyMarkup?: InlineKeyboardMarkup;
+}
+
+export interface SendPhotoParams {
+    chatId: string | number;
+    /** Raw image bytes; the bot uploads them rather than pointing Telegram at a URL. */
+    photo: Buffer;
+    filename?: string;
+    caption?: string;
+    parseMode?: ParseModeType;
+    replyMarkup?: InlineKeyboardMarkup;
 }
 
 export interface TelegramMessageResponse {
@@ -27,7 +53,8 @@ export interface TelegramMessageResponse {
         first_name?: string;
     };
     date: number;
-    text: string;
+    /** Absent on messages that carry only a photo. */
+    text?: string;
 }
 
 export interface TelegramUser {
@@ -55,15 +82,30 @@ export interface TelegramBotInfo {
     username: string;
 }
 
+export interface TelegramIncomingMessage {
+    message_id: number;
+    from?: TelegramUser;
+    chat: TelegramChat;
+    date: number;
+    text?: string;
+}
+
+/**
+ * Delivered when a client presses an inline button. Telegram keeps showing a spinner on
+ * the button until `answerCallbackQuery` acknowledges the id, so every branch that
+ * handles one has to answer it.
+ */
+export interface TelegramCallbackQuery {
+    id: string;
+    from: TelegramUser;
+    message?: TelegramIncomingMessage;
+    data?: string;
+}
+
 export interface TelegramUpdate {
     update_id: number;
-    message?: {
-        message_id: number;
-        from?: TelegramUser;
-        chat: TelegramChat;
-        date: number;
-        text?: string;
-    };
+    message?: TelegramIncomingMessage;
+    callback_query?: TelegramCallbackQuery;
 }
 
 export interface WebhookInfo {

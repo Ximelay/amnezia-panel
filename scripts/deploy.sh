@@ -110,9 +110,16 @@ add_cron_jobs() {
     local project_root="$1"
     local backup_db_path="$project_root/scripts/backup-database.sh"
     local time2pay_path="$project_root/scripts/time2pay.sh"
+    local tg_cleanup_path="$project_root/scripts/telegram-cleanup.sh"
+    local tg_bot_path="$project_root/scripts/telegram-bot.sh"
 
-    local cron_backup="0 0 */3 * * /bin/bash $backup_db_path"
+    local cron_backup="0 0 1 * * /bin/bash $backup_db_path"
     local cron_time2pay="30 10 * * * /bin/bash $time2pay_path"
+    # Hourly: Telegram refuses to delete a bot message older than 48 hours, so a key left
+    # by a missed sweep stays in the client's chat forever.
+    local cron_tg_cleanup="0 * * * * /bin/bash $tg_cleanup_path"
+    # Every minute: one run long-polls for ~50s, so this is how quickly the bot answers.
+    local cron_tg_bot="* * * * * /bin/bash $tg_bot_path"
 
     local temp_crontab=$(mktemp)
 
@@ -129,7 +136,7 @@ add_cron_jobs() {
         print_message "Cron job for backup already exists"
     else
         echo "$cron_backup" >> "$temp_crontab"
-        print_message "Cron job added: Database backup every 3 days at midnight"
+        print_message "Cron job added: Database backup on the 1st of each month at midnight"
     fi
 
     if grep -qF "$time2pay_path" "$temp_crontab"; then
@@ -139,11 +146,25 @@ add_cron_jobs() {
         print_message "Cron job added: time2pay daily at 10:30"
     fi
 
+    if grep -qF "$tg_cleanup_path" "$temp_crontab"; then
+        print_message "Cron job for telegram cleanup already exists"
+    else
+        echo "$cron_tg_cleanup" >> "$temp_crontab"
+        print_message "Cron job added: Telegram key cleanup hourly"
+    fi
+
+    if grep -qF "$tg_bot_path" "$temp_crontab"; then
+        print_message "Cron job for the Telegram bot already exists"
+    else
+        echo "$cron_tg_bot" >> "$temp_crontab"
+        print_message "Cron job added: Telegram bot polling every minute"
+    fi
+
     crontab "$temp_crontab"
     rm -f "$temp_crontab"
 
     print_message "Current cron jobs:"
-    crontab -l 2>/dev/null | grep -E "(backup|time2pay|$project_root)" || echo "  (no relevant cron jobs found)"
+    crontab -l 2>/dev/null | grep -E "(backup|time2pay|telegram|$project_root)" || echo "  (no relevant cron jobs found)"
 }
 
 setup_autostart() {

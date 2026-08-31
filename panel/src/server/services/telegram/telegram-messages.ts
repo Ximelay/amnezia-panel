@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { telegramService } from './telegram';
 import { recordKeyMessage } from './key-messages';
 import { encryptionService } from '../encryption';
+import { escapeHtml } from './bot/texts';
 import { format } from 'date-fns';
 import { protocolsMapping } from '@/lib/data/mappings';
 import type { Languages, Protocols } from 'prisma/generated/enums';
@@ -65,7 +66,7 @@ function formatConfigsMessage(
     let message = '';
 
     if (showHeader) {
-        message += `🔐 <b>${t.header} ${process.env.NEXT_PUBLIC_VPN_NAME}</b>\n\n`;
+        message += `🔐 <b>${t.header} ${escapeHtml(process.env.NEXT_PUBLIC_VPN_NAME ?? '')}</b>\n\n`;
     }
 
     const configMessages = configs.map((config, index) => {
@@ -82,10 +83,13 @@ function formatConfigsMessage(
             ? config.clientName.split('-')[1] || config.clientName
             : config.clientName;
 
-        return `${t.configFor} <b>${clientNameDisplay}</b>
-${t.protocol}: <b>${protocolsMapping[config.protocol] || t.notSpecified}</b>
+        // Escaped because these are names an admin typed and a key the VPN server
+        // produced: an unescaped `&` or `<` makes Telegram reject the whole message with
+        // "can't parse entities", and the client is left with no key at all.
+        return `${t.configFor} <b>${escapeHtml(clientNameDisplay)}</b>
+${t.protocol}: <b>${escapeHtml(protocolsMapping[config.protocol] || t.notSpecified)}</b>
 ${t.expirationDate}: <b>${expiryDate}</b>
-<code>${decryptedVpnKey}</code>${index < configs.length - 1 ? '\n─────────────────────\n' : ''}`;
+<code>${escapeHtml(decryptedVpnKey ?? '')}</code>${index < configs.length - 1 ? '\n─────────────────────\n' : ''}`;
     });
 
     message += configMessages.join('\n');

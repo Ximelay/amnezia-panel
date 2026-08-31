@@ -158,6 +158,50 @@ export async function purgeKeyMessagesForClient(clientId: number): Promise<Purge
 }
 
 /**
+ * Takes the key back out of the client's Telegram chat once the config behind it is dead.
+ *
+ * Best effort by design: the config is already revoked on the VPN server by the time this
+ * runs, so a Telegram outage must not turn a successful revocation into an error. What it
+ * cannot do is silently: a key older than 48 hours stays in the chat forever, and that
+ * fact belongs in the log rather than in nobody's head.
+ *
+ * `adminId` is null when the client triggered the revocation from the bot rather than an
+ * admin from the panel.
+ */
+export async function withdrawSentKeys(
+    configIds: string[],
+    label: string,
+    adminId: string | null
+): Promise<void> {
+    try {
+        const purged = await purgeKeyMessagesForConfigs(configIds);
+
+        if (purged.deleted > 0)
+            await logsService.createLog(
+                'TELEGRAM',
+                'INFO',
+                `${purged.deleted} Telegram message(s) with the key of <${label}> deleted from the client chat`,
+                adminId ?? undefined
+            );
+
+        if (purged.expired > 0)
+            await logsService.createLog(
+                'TELEGRAM',
+                'WARNING',
+                `${purged.expired} Telegram message(s) with the key of <${label}> stayed in the client chat: older than 48 hours and no longer deletable by the bot`,
+                adminId ?? undefined
+            );
+    } catch (error) {
+        await logsService.createLog(
+            'TELEGRAM',
+            'WARNING',
+            `Could not withdraw the sent key of <${label}> from Telegram: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            adminId ?? undefined
+        );
+    }
+}
+
+/**
  * The scheduled sweep: withdraws everything that has outlived TELEGRAM_KEY_TTL_MINUTES.
  * Returns null when the feature is disabled.
  */

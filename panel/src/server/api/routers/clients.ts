@@ -18,6 +18,8 @@ import { TRPCError } from '@trpc/server';
 import { sendConfigsToTelegram } from '@/server/services/telegram/telegram-messages';
 import { purgeKeyMessagesForClient } from '@/server/services/telegram/key-messages';
 import { telegramService } from '@/server/services/telegram/telegram';
+import { processUpdates } from '@/server/services/telegram/bot';
+import { appsMessage } from '@/server/services/telegram/bot/texts';
 import { updateExpiresAtSchema } from '@/lib/schemas/configs';
 import { Protocols } from 'prisma/generated/enums';
 import { readProtocolVersion } from '@/server/services/vpn-config';
@@ -532,35 +534,10 @@ export const clientsRouter = createTRPCRouter({
             if (!foundClient?.telegramId)
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
 
-            const message =
-                foundClient.language === 'ENGLISH'
-                    ? `For using <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> you need to download the open-source AmneziaVPN app.
-
-<b>💻 Computers & Laptops</b>
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_windows_x64.exe">Windows</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_macos_x64.pkg">macOS</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_linux_x64.run">Linux</a>
-• <a href="https://docs.amnezia.org/documentation/installing-app-on-linux">Linux docs</a>
-
-<b>📱 Smartphones & Tablets</b>
-• <a href="https://play.google.com/store/apps/details?id=org.amnezia.vpn">Android</a>
-• <a href="https://apps.apple.com/us/app/defaultvpn/id6744725017">iPhone / iPad</a>`
-                    : `Для использования <b>${process.env.NEXT_PUBLIC_VPN_NAME}</b> вам нужно скачать open-source приложение AmneziaVPN.
-
-<b>💻 Компьютеры и ноутбуки</b>
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_windows_x64.exe">Windows</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_macos_x64.pkg">macOS</a> 
-• <a href="https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.1.5/AmneziaVPN_5.0.1.5_linux_x64.run">Linux</a>
-• <a href="https://docs.amnezia.org/documentation/installing-app-on-linux">Документация для Linux</a>
-
-<b>📱 Смартфоны и планшеты</b>
-• <a href="https://play.google.com/store/apps/details?id=org.amnezia.vpn">Android</a>
-• <a href="https://apps.apple.com/us/app/defaultvpn/id6744725017">iPhone / iPad</a>`;
-
             await telegramService.sendMessage(
                 {
                     chatId: foundClient.telegramId,
-                    text: message,
+                    text: appsMessage(foundClient.language),
                     parseMode: 'HTML',
                 },
                 foundClient.name
@@ -799,7 +776,14 @@ export const clientsRouter = createTRPCRouter({
         }),
 
     /**
-     * Looks for the pending payload among recent bot updates and binds the chat id.
+     * Drains any pending bot updates and reports whether the client is now bound.
+     *
+     * The binding itself happens in the bot poller, which is the only consumer allowed to
+     * confirm update offsets — two readers would race, and whichever polled first would
+     * hide the "/start" from the other. Running one pass here means the button still
+     * works immediately even when the scheduled poll is a minute away, or not installed
+     * at all.
+     *
      * Returns bound:false rather than throwing when the client simply has not pressed
      * Start yet, since that is the expected state right after the link is sent.
      */
@@ -810,18 +794,24 @@ export const clientsRouter = createTRPCRouter({
 
             const foundClient = await ctx.db.clients.findUnique({
                 where: { id },
-                select: { name: true, telegramLinkToken: true, telegramLinkExpiresAt: true },
+                select: {
+                    name: true,
+                    telegramId: true,
+                    telegramLinkToken: true,
+                    telegramLinkExpiresAt: true,
+                },
             });
             if (!foundClient)
                 throw new TRPCError({ code: 'NOT_FOUND', message: 'Client not found' });
 
-            if (!foundClient.telegramLinkToken)
+            if (!foundClient.telegramLinkToken && !foundClient.telegramId)
                 throw new TRPCError({
                     code: 'BAD_REQUEST',
                     message: 'No pending link for this client, generate one first',
                 });
 
             if (
+                foundClient.telegramLinkToken &&
                 foundClient.telegramLinkExpiresAt &&
                 foundClient.telegramLinkExpiresAt.getTime() < Date.now()
             )
@@ -830,31 +820,15 @@ export const clientsRouter = createTRPCRouter({
                     message: 'The link has expired, generate a new one',
                 });
 
-            const updates = await telegramService.getUpdates();
-            const expected = `/start ${foundClient.telegramLinkToken}`;
-            const match = updates.find((update) => update.message?.text?.trim() === expected);
+            await processUpdates();
 
-            if (!match?.message) return { bound: false as const };
-
-            const telegramId = String(match.message.chat.id);
-
-            await ctx.db.clients.update({
+            const bound = await ctx.db.clients.findUnique({
                 where: { id },
-                data: { telegramId, telegramLinkToken: null, telegramLinkExpiresAt: null },
+                select: { telegramId: true },
             });
 
-            await logsService.createLog(
-                'TELEGRAM',
-                'INFO',
-                `Telegram chat bound to client <${foundClient.name}>`,
-                ctx.session.user.id
-            );
+            if (!bound?.telegramId) return { bound: false as const };
 
-            return {
-                bound: true as const,
-                telegramId,
-                username: match.message.chat.username ?? null,
-                firstName: match.message.chat.first_name ?? null,
-            };
+            return { bound: true as const, telegramId: bound.telegramId };
         }),
 });

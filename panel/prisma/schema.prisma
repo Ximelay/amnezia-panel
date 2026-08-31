@@ -29,17 +29,25 @@ model Admins {
 }
 
 model Clients {
-    id         Int       @id @default(autoincrement())
-    createdAt  DateTime  @default(now())
-    name       String
-    language   Languages
-    telegramId String?
-    status     Boolean   @default(true)
-    Configs    Configs[]
+    id          Int                 @id @default(autoincrement())
+    createdAt   DateTime            @default(now())
+    name        String
+    language    Languages
+    telegramId  String?
+    status      Boolean             @default(true)
+    Configs     Configs[]
+    BotRequests ClientBotRequests[]
 
     // Single-use payload for a t.me deep link, cleared once the chat id is bound.
     telegramLinkToken     String?   @unique
     telegramLinkExpiresAt DateTime?
+
+    // Deliberately not unique, even though two clients sharing a chat is always a
+    // mistake: the constraint would have to be added to a table that may already hold
+    // duplicates, and `db push` runs unattended on every container start. The bot
+    // refuses to serve an ambiguous chat instead, which fails safe without a migration
+    // that can strand the deployment.
+    @@index([telegramId])
 }
 
 model Configs {
@@ -77,6 +85,42 @@ model TelegramKeyMessages {
 
     @@unique([chatId, messageId])
     @@index([deletedAt, createdAt])
+}
+
+/// Cursor of the bot poller, in a single row.
+///
+/// Telegram keeps handing out an update until a later poll confirms it by asking for a
+/// higher offset, so without this the bot would answer the same message on every run.
+/// Confirmation happens only after the update has been handled, which makes a crash
+/// mid-handling replay the update rather than swallow it.
+model TelegramBotState {
+    id           Int      @id @default(1)
+    lastUpdateId BigInt   @default(0)
+    updatedAt    DateTime @updatedAt
+
+    /// Held for the length of one polling run so two overlapping runs cannot both
+    /// consume the same updates. A timestamp rather than a Postgres advisory lock
+    /// because Prisma hands out a different pooled connection per query, and a
+    /// session-scoped lock would then be released by the wrong one.
+    lockedUntil DateTime?
+}
+
+/// Ledger of everything a client asked the bot to do.
+///
+/// Serves two purposes at once: it is the rate limiter (a window is a count over
+/// `createdAt`) and the audit trail for who pulled their key when — which is also the
+/// only record that survives a reissue deleting the config it was aimed at.
+model ClientBotRequests {
+    id        Int        @id @default(autoincrement())
+    createdAt DateTime   @default(now())
+    clientId  Int
+    action    BotActions
+    /// Not a foreign key on purpose: a reissue deletes the config row this names, and
+    /// the fact that the client asked for it has to outlive the config.
+    configId  String?
+    Clients   Clients    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+    @@index([clientId, action, createdAt])
 }
 
 model Logs {
@@ -127,4 +171,12 @@ enum LogTypes {
 enum Languages {
     RUSSIAN
     ENGLISH
+}
+
+enum BotActions {
+    KEYS
+    QR
+    REISSUE
+    STATUS
+    APPS
 }
